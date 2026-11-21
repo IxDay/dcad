@@ -219,8 +219,10 @@ extern "C" void dcad_gui_spacing(void) { ImGui::Spacing(); }
 
 extern "C" void dcad_gui_image(void* texID, float w, float h)
 {
+    // OpenGL FBO textures are bottom-up, ImGui's image UVs are top-down.
+    // Flip V so the model is not displayed upside down.
     ImGui::Image(ImTextureRef(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(texID))),
-                 ImVec2(w, h));
+                 ImVec2(w, h), ImVec2(0, 1), ImVec2(1, 0));
 }
 
 extern "C" int dcad_gui_invisible_button(const char* id, float w, float h)

@@ -26,9 +26,25 @@ script, press **Cmd/Ctrl+Enter** (or click **Run**) to recompile and re-mesh.
 | Reset camera | `Reset camera` button |
 | Export STEP | `Export STEP` button → writes `dcad-export.step` |
 | Save script | `Save script` button → writes `.dcad-gui-state` |
+| Animate | Play / Pause / Restart, Speed and Timeline sliders (animated scripts only) |
 
 The two panes use a fixed 44% / 56% split: they cannot be dragged, resized or
 re-docked. Both the UI chrome and the 3D render use the light brocanth palette.
+
+### Animation
+
+A script opts into playback by defining two extra locals alongside `result`:
+
+```d
+auto animParts = parts;                                  // .id + .shape each
+double[3][string] delegate(double) animPose = (t) => poseAt(t);
+```
+
+The wrapper exports them over the plugin ABI. Each part is meshed **once**;
+playback only uploads one translation uniform per part per frame, so the 18-part
+coffee-table animation runs without any OCCT work in the render loop. See
+[`scripts/coffee-table-animation.d`](scripts/coffee-table-animation.d) for the
+full script, and `coffee_motion.poseAt()` for the keyframed knock-down motion.
 
 ## Script contract
 

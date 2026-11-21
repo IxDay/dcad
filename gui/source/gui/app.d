@@ -100,9 +100,62 @@ void main(string[] args)
     float deflection = 1.0f;
     Shape currentShape;
 
+    // Animation state. Parts are meshed once; each frame only updates a
+    // per-part translation uniform, so playback is independent of OCCT.
+    bool hasAnimation;
+    bool animPlaying;
+    double animTime;
+    double animSpeed = 1.0;
+    enum double animDuration = 8.0; // seconds for the full open/close cycle
+    double lastFrameTime = glfwGetTime();
+
+    void doRunScript()
+    {
+        import std.string : fromStringz;
+        auto src = fromStringz(dcad_textedit_get_text(editor)).idup;
+        auto result = host.run(src);
+        if (result.ok())
+        {
+            currentShape = result.shape;
+            hasAnimation = host.hasAnimation;
+            immutable count = host.animPartCount();
+            if (hasAnimation)
+            {
+                const(void)*[] ptrs;
+                foreach (i; 0 .. count)
+                {
+                    auto p = host.animPartShape(i);
+                    if (p !is null) ptrs ~= p;
+                }
+                immutable tris = viewport.setParts(ptrs, deflection);
+                animTime = 0;
+                animPlaying = true;
+                status = "OK - " ~ count.to!string ~ " parts, " ~
+                         tris.to!string ~ " triangles (animated)";
+            }
+            else
+            {
+                immutable tris = viewport.setShape(
+                    cast(const(void)*)&currentShape.native(), deflection);
+                status = "OK - " ~ tris.to!string ~ " triangles";
+            }
+            lastError = null;
+            showError = false;
+        }
+        else
+        {
+            viewport.clearMesh();
+            hasAnimation = false;
+            animPlaying = false;
+            lastError = result.error;
+            showError = true;
+            status = "Script failed - see error below";
+            stderr.writeln("script error: ", result.error);
+        }
+    }
+
     // Initial run so the viewport is not empty on startup.
-    runScript(editor, host, viewport, status, lastError, showError,
-              deflection, currentShape);
+    doRunScript();
 
     // --- Main loop --------------------------------------------------------
     while (glfwWindowShouldClose(window) == 0)
@@ -181,8 +234,7 @@ void main(string[] args)
 
         // Run after the editor frame so text is up to date.
         if (doRun)
-            runScript(editor, host, viewport, status, lastError, showError,
-                      deflection, currentShape);
+            doRunScript();
 
         // ---------------- Viewport pane ----------------
         dcad_gui_set_next_window_pos(editorW, 0, condAlways);
@@ -215,10 +267,60 @@ void main(string[] args)
             if (dcad_gui_slider_float("Deflection", &deflection, 0.05f, 5.0f) != 0 &&
                 currentShape !is null)
             {
-                auto p = cast(const(void)*)&currentShape.native();
-                auto tris = viewport.setShape(p, deflection);
+                int tris;
+                if (hasAnimation)
+                {
+                    const(void)*[] ptrs;
+                    foreach (i; 0 .. host.animPartCount())
+                    {
+                        auto p = host.animPartShape(i);
+                        if (p !is null) ptrs ~= p;
+                    }
+                    tris = viewport.setParts(ptrs, deflection);
+                }
+                else
+                    tris = viewport.setShape(
+                        cast(const(void)*)&currentShape.native(), deflection);
                 status = "Remeshed - " ~ tris.to!string ~ " triangles";
             }
+
+            // Animation transport, only shown for scripts that opt in.
+            if (hasAnimation)
+            {
+                dcad_gui_separator();
+                dcad_gui_text_colored("ASSEMBLY ANIMATION".toStringz,
+                                      0.38f, 0.35f, 0.61f, 1);
+                if (dcad_gui_button(animPlaying ? "Pause" : "Play"))
+                    animPlaying = !animPlaying;
+                dcad_gui_same_line();
+                if (dcad_gui_button("Restart"))
+                {
+                    animTime = 0;
+                    animPlaying = true;
+                }
+
+                float speedF = cast(float) animSpeed;
+                if (dcad_gui_slider_float("Speed", &speedF, 0.1f, 3.0f) != 0)
+                    animSpeed = speedF;
+
+                float timeF = cast(float)(animTime / animDuration);
+                if (dcad_gui_slider_float("Timeline", &timeF, 0f, 1f) != 0)
+                    animTime = timeF * animDuration;
+            }
+
+            // Advance the animation. Only a translation uniform is uploaded;
+            // the OCCT meshes stay static for the whole playback.
+            immutable now = glfwGetTime();
+            if (hasAnimation)
+            {
+                if (animPlaying)
+                    animTime += (now - lastFrameTime) * animSpeed;
+                while (animTime > animDuration)
+                    animTime -= animDuration;
+                viewport.setOffsets(host.animPose(animTime / animDuration,
+                                                  host.animPartCount()));
+            }
+            lastFrameTime = now;
 
             // Render the FBO at the panel's pixel size, then display it.
             immutable pw = cast(int)(imgW * 2);
@@ -230,35 +332,6 @@ void main(string[] args)
 
         dcad_gui_render();
         glfwSwapBuffers(window);
-    }
-}
-
-private void runScript(void* editor, ScriptHost host, Viewport viewport,
-                       ref string status, ref string lastError,
-                       ref bool showError, float deflection,
-                       ref Shape currentShape)
-{
-    import std.string : fromStringz;
-    auto src = fromStringz(dcad_textedit_get_text(editor)).idup;
-    auto result = host.run(src);
-    if (result.ok())
-    {
-        auto p = cast(const(void)*)&result.shape.native();
-        immutable tris = viewport.setShape(p, deflection);
-        currentShape = result.shape;
-        status = "OK - " ~ tris.to!string ~ " triangles";
-        lastError = null;
-        showError = false;
-    }
-    else
-    {
-        // Clear the mesh so a failed script never leaves a stale render that
-        // looks like a successful one; the error is shown inline in the editor.
-        viewport.clearMesh();
-        lastError = result.error;
-        showError = true;
-        status = "Script failed - see error below";
-        stderr.writeln("script error: ", result.error);
     }
 }
 

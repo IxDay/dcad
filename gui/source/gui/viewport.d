@@ -87,11 +87,12 @@ attribute vec3 aPosition;
 attribute vec3 aNormal;
 uniform mat4 uProj;
 uniform mat4 uView;
+uniform vec3 uOffset;
 varying vec3 vNormal;
 void main()
 {
     vNormal = aNormal;
-    gl_Position = uProj * uView * vec4(aPosition, 1.0);
+    gl_Position = uProj * uView * vec4(aPosition + uOffset, 1.0);
 }
 VS";
 
@@ -129,9 +130,12 @@ private:
     uint program;
     int projLoc;
     int viewLoc;
+    int offsetLoc;
     int posLoc;
     int normLoc;
     MeshGpu mesh;
+    MeshGpu[] partMeshes;
+    float[3][] partOffsets;
     bool diagnosticsDone;
 
     int width = 64;
@@ -177,29 +181,102 @@ public:
             return 0;
 
         clearMesh();
-
-        glGenBuffers(1, &mesh.posVbo);
-        glBindBuffer(GL_ARRAY_BUFFER, mesh.posVbo);
-        glBufferData(GL_ARRAY_BUFFER, m.triangles * 9 * float.sizeof,
-                     m.vertices, GL_STATIC_DRAW);
-
-        glGenBuffers(1, &mesh.normVbo);
-        glBindBuffer(GL_ARRAY_BUFFER, mesh.normVbo);
-        glBufferData(GL_ARRAY_BUFFER, m.triangles * 9 * float.sizeof,
-                     m.normals, GL_STATIC_DRAW);
-
-        mesh.vertexCount = m.triangles * 3;
-
-        // Compute bounds for camera framing.
+        mesh = upload(m);
         float[3] lo = [1e30f, 1e30f, 1e30f];
         float[3] hi = [-1e30f, -1e30f, -1e30f];
-        for (int i = 0; i < mesh.vertexCount; ++i)
+        expandBounds(lo, hi, m);
+        frameCamera(lo, hi);
+        return m.triangles;
+    }
+
+    /// Upload each animation part separately. One draw call per part keeps
+    /// animation to a uniform update per frame -- no re-meshing or OCCT work.
+    int setParts(const(void)*[] shapes, double deflection)
+    {
+        float[3] lo = [1e30f, 1e30f, 1e30f];
+        float[3] hi = [-1e30f, -1e30f, -1e30f];
+        int total;
+
+        clearMesh();
+        foreach (s; shapes)
+        {
+            DcadMesh m;
+            if (dcad_mesh_shape(s, deflection, &m) != 0)
+                continue;
+            scope(exit) dcad_mesh_free(&m);
+            if (m.triangles <= 0)
+                continue;
+            partMeshes ~= upload(m);
+            partOffsets ~= [0f, 0f, 0f];
+            expandBounds(lo, hi, m);
+            total += m.triangles;
+        }
+        if (total == 0)
+            return 0;
+        frameCamera(lo, hi);
+        return total;
+    }
+
+    /// Apply a translation per part (3 doubles each) without re-meshing.
+    void setOffsets(double[] values)
+    {
+        foreach (i; 0 .. partOffsets.length)
+            foreach (k; 0 .. 3)
+            {
+                immutable idx = i * 3 + k;
+                partOffsets[i][k] = idx < values.length ? cast(float) values[idx] : 0;
+            }
+    }
+
+    /// Remove the current mesh (used when a script fails, to avoid a stale render).
+    void clearMesh()
+    {
+        freeGpu(mesh);
+        foreach (ref p; partMeshes)
+            freeGpu(p);
+        partMeshes = null;
+        partOffsets = null;
+        mesh = MeshGpu.init;
+    }
+
+    bool hasMesh() const { return mesh.vertexCount > 0 || partMeshes.length > 0; }
+
+private:
+    static MeshGpu upload(ref DcadMesh m)
+    {
+        MeshGpu g;
+        glGenBuffers(1, &g.posVbo);
+        glBindBuffer(GL_ARRAY_BUFFER, g.posVbo);
+        glBufferData(GL_ARRAY_BUFFER, m.triangles * 9 * float.sizeof,
+                     m.vertices, GL_STATIC_DRAW);
+        glGenBuffers(1, &g.normVbo);
+        glBindBuffer(GL_ARRAY_BUFFER, g.normVbo);
+        glBufferData(GL_ARRAY_BUFFER, m.triangles * 9 * float.sizeof,
+                     m.normals, GL_STATIC_DRAW);
+        g.vertexCount = m.triangles * 3;
+        return g;
+    }
+
+    static void freeGpu(ref MeshGpu g)
+    {
+        if (g.posVbo) glDeleteBuffers(1, &g.posVbo);
+        if (g.normVbo) glDeleteBuffers(1, &g.normVbo);
+        g = MeshGpu.init;
+    }
+
+    static void expandBounds(ref float[3] lo, ref float[3] hi, ref DcadMesh m)
+    {
+        for (int i = 0; i < m.triangles * 3; ++i)
             for (int k = 0; k < 3; ++k)
             {
                 const v = m.vertices[i * 3 + k];
                 if (v < lo[k]) lo[k] = v;
                 if (v > hi[k]) hi[k] = v;
             }
+    }
+
+    void frameCamera(ref float[3] lo, ref float[3] hi)
+    {
         for (int k = 0; k < 3; ++k)
             mesh.center[k] = (lo[k] + hi[k]) / 2;
         float maxSpan = 0;
@@ -209,26 +286,15 @@ public:
             if (span > maxSpan) maxSpan = span;
         }
         mesh.radius = maxSpan > 0 ? maxSpan / 2 : 1;
-
         if (!cameraInitialized)
         {
             target = mesh.center;
             distance = mesh.radius * 3.2f + 10;
             cameraInitialized = true;
         }
-        return m.triangles;
     }
 
-    /// Remove the current mesh (used when a script fails, to avoid a stale render).
-    void clearMesh()
-    {
-        if (mesh.posVbo) glDeleteBuffers(1, &mesh.posVbo);
-        if (mesh.normVbo) glDeleteBuffers(1, &mesh.normVbo);
-        mesh = MeshGpu.init;
-    }
-
-    bool hasMesh() const { return mesh.vertexCount > 0; }
-
+public:
     /// Camera input from ImGui mouse state.
     void orbit(float dx, float dy)
     {
@@ -278,7 +344,7 @@ public:
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
 
-        if (mesh.vertexCount > 0)
+        if (mesh.vertexCount > 0 || partMeshes.length > 0)
         {
             const aspect = cast(float) width / height;
             auto proj = perspective(0.8f, aspect, 0.1f,
@@ -290,20 +356,19 @@ public:
                 target[2] + distance * sin(pitch)
             ];
             auto view = lookAt(eye, target, [0f, 0f, 1f]);
-            auto mvp = multiply(proj, view);
 
             glUseProgram(program);
             glUniformMatrix4fv(projLoc, 1, GL_FALSE, proj.ptr);
             glUniformMatrix4fv(viewLoc, 1, GL_FALSE, view.ptr);
 
-            glBindBuffer(GL_ARRAY_BUFFER, mesh.posVbo);
-            glVertexAttribPointer(posLoc, 3, GL_FLOAT, GL_FALSE, 0, null);
-            glEnableVertexAttribArray(posLoc);
-            glBindBuffer(GL_ARRAY_BUFFER, mesh.normVbo);
-            glVertexAttribPointer(normLoc, 3, GL_FLOAT, GL_FALSE, 0, null);
-            glEnableVertexAttribArray(normLoc);
-
-            glDrawArrays(GL_TRIANGLES, 0, mesh.vertexCount);
+            if (mesh.vertexCount > 0)
+            {
+                float[3] zero = [0f, 0f, 0f];
+                drawMesh(mesh, zero);
+            }
+            else
+                foreach (i, ref p; partMeshes)
+                    drawMesh(p, partOffsets[i]);
 
             glDisableVertexAttribArray(posLoc);
             glDisableVertexAttribArray(normLoc);
@@ -320,11 +385,24 @@ public:
 private:
     static float max(float a, float b) { return a > b ? a : b; }
 
+    void drawMesh(ref MeshGpu g, ref float[3] off)
+    {
+        glUniform3f(offsetLoc, off[0], off[1], off[2]);
+        glBindBuffer(GL_ARRAY_BUFFER, g.posVbo);
+        glVertexAttribPointer(posLoc, 3, GL_FLOAT, GL_FALSE, 0, null);
+        glEnableVertexAttribArray(posLoc);
+        glBindBuffer(GL_ARRAY_BUFFER, g.normVbo);
+        glVertexAttribPointer(normLoc, 3, GL_FLOAT, GL_FALSE, 0, null);
+        glEnableVertexAttribArray(normLoc);
+        glDrawArrays(GL_TRIANGLES, 0, g.vertexCount);
+    }
+
     void initGL()
     {
         program = createProgram(vertexShaderSrc, fragmentShaderSrc);
         projLoc = glGetUniformLocation(program, "uProj");
         viewLoc = glGetUniformLocation(program, "uView");
+        offsetLoc = glGetUniformLocation(program, "uOffset");
         posLoc = glGetAttribLocation(program, "aPosition");
         normLoc = glGetAttribLocation(program, "aNormal");
         stderr.writefln("viewport: program=%u proj=%d view=%d pos=%d norm=%d",
@@ -352,8 +430,9 @@ private:
         stderr.writefln("viewport: linked=%d log=%s", linked,
                         logLen > 0 ? fromStringz(log.ptr) : "(none)");
 
-        stderr.writefln("viewport: fbo=%u tex=%u depth=%u verts=%d size=%dx%d",
-                        fbo, colorTex, depthRb, mesh.vertexCount, width, height);
+        stderr.writefln("viewport: fbo=%u tex=%u depth=%u verts=%d parts=%d size=%dx%d",
+                        fbo, colorTex, depthRb, mesh.vertexCount,
+                        partMeshes.length, width, height);
 
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         auto px = new ubyte[width * height * 4];

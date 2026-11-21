@@ -56,6 +56,16 @@ private Shape toShape(T)(T value) {
         static assert(0, "result must be a Shape or a Workplane");
 }
 
+/* Optional animation protocol. A script opts in by defining, inside its own
+ * source (which is injected into dcad_script_run), these two locals:
+ *   auto animParts = <array of NamedPart-like values with .id and .shape>;
+ *   double[3][string] delegate(double) animPose = (t) => ...; // t in [0,1]
+ * They are copied into module globals from the epilogue, where they are in
+ * scope. Non-animated scripts pay nothing. */
+private Shape[] g_animShapes;
+private string[] g_animIds;
+private double[3][string] delegate(double) g_animPose;
+
 extern(C) export void* dcad_script_run()
 {
     try
@@ -63,6 +73,19 @@ extern(C) export void* dcad_script_run()
 PRELUDE_END";
 
 private enum string epilogue = q"EPILOGUE_END
+        // Capture optional animation hooks while the script's locals are in
+        // scope (the generated source is inserted inside this function).
+        static if (is(typeof(animParts)))
+        {
+            foreach (p; animParts)
+            {
+                g_animShapes ~= toShape(p.shape);
+                g_animIds ~= p.id;
+            }
+        }
+        static if (is(typeof(animPose)))
+            g_animPose = animPose;
+
         Shape finalShape = toShape(result);
         return cast(void*) dcad_shape_clone(&finalShape.native());
     }
@@ -76,6 +99,37 @@ private enum string epilogue = q"EPILOGUE_END
 extern(C) export const(char)* dcad_script_error()
 {
     return g_errorBuf.ptr;
+}
+
+extern(C) export int dcad_anim_part_count()
+{
+    return cast(int) g_animShapes.length;
+}
+
+extern(C) export const(void)* dcad_anim_part_shape(int i)
+{
+    if (i < 0 || i >= g_animShapes.length) return null;
+    return cast(const(void)*)&g_animShapes[i].native();
+}
+
+extern(C) export const(char)* dcad_anim_part_id(int i)
+{
+    if (i < 0 || i >= g_animIds.length) return null;
+    return (g_animIds[i] ~ "\0").ptr;
+}
+
+extern(C) export void dcad_anim_pose(double t, double* offsets)
+{
+    if (g_animPose is null) return;
+    auto pose = g_animPose(t);
+    foreach (i, id; g_animIds)
+    {
+        double[3] v = [0.0, 0.0, 0.0];
+        if (auto p = id in pose) v = *p;
+        offsets[i * 3 + 0] = v[0];
+        offsets[i * 3 + 1] = v[1];
+        offsets[i * 3 + 2] = v[2];
+    }
 }
 EPILOGUE_END";
 
@@ -112,6 +166,7 @@ public:
             buildPath(sampleDir, "coffee_dimensions.d"),
             buildPath(sampleDir, "coffee_util.d"),
             buildPath(sampleDir, "coffee_parts.d"),
+            buildPath(sampleDir, "coffee_motion.d"),
         ];
         buildLinkArgs();
     }
@@ -177,6 +232,51 @@ public:
         auto shape = new Shape(*cast(TopoDS_Shape*) p);
         dcad_shape_free(p);
         return RunResult(shape, null);
+    }
+
+    /// True when the loaded script exported at least one animation part.
+    bool hasAnimation()
+    {
+        return animPartCount() > 0;
+    }
+
+    int animPartCount()
+    {
+        if (handle is null) return 0;
+        alias Fn = extern(C) int function();
+        auto fn = cast(Fn) dlsym(handle, "dcad_anim_part_count");
+        return fn is null ? 0 : fn();
+    }
+
+    /// Raw pointer to a part shape; valid until the next run() unloads the plugin.
+    const(void)* animPartShape(int i)
+    {
+        if (handle is null) return null;
+        alias Fn = extern(C) const(void)* function(int);
+        auto fn = cast(Fn) dlsym(handle, "dcad_anim_part_shape");
+        return fn is null ? null : fn(i);
+    }
+
+    string animPartId(int i)
+    {
+        if (handle is null) return null;
+        alias Fn = extern(C) const(char)* function(int);
+        auto fn = cast(Fn) dlsym(handle, "dcad_anim_part_id");
+        if (fn is null) return null;
+        auto p = fn(i);
+        return p is null ? null : fromStringz(p).idup;
+    }
+
+    /// 3 doubles (dx,dy,dz) per part at normalised time t.
+    double[] animPose(double t, int count)
+    {
+        if (handle is null || count <= 0) return null;
+        alias Fn = extern(C) void function(double, double*);
+        auto fn = cast(Fn) dlsym(handle, "dcad_anim_pose");
+        if (fn is null) return null;
+        auto offsets = new double[count * 3];
+        fn(t, offsets.ptr);
+        return offsets;
     }
 
 private:

@@ -127,6 +127,42 @@ private Pose[] poses()
     return result;
 }
 
+/**
+ * Sample the staged knock-down motion at normalised time t in [0, 1].
+ * Used by the GUI preview; the JSON writer below stays the source of truth
+ * for the exported animation data.
+ */
+double[3][string] poseAt(double t)
+{
+    auto all = poses();
+    immutable last = all.length - 1;
+    immutable x = (t < 0 ? 0 : t > 1 ? 1 : t) * cast(double) last;
+    immutable i0 = cast(size_t) x;
+    immutable i1 = i0 < last ? i0 + 1 : last;
+    immutable f = x - cast(double) i0;
+
+    string[] ids;
+    foreach (pose; all)
+        foreach (id, _; pose)
+            if (!idIndexOf(ids, id))
+                ids ~= id;
+    ids = ids.sort.array;
+
+    double[3][string] result;
+    foreach (id; ids)
+    {
+        double[3] a = [0.0, 0.0, 0.0];
+        double[3] b = [0.0, 0.0, 0.0];
+        if (auto p = id in all[i0]) a = *p;
+        if (auto p = id in all[i1]) b = *p;
+        double[3] v;
+        foreach (k; 0 .. 3)
+            v[k] = a[k] + (b[k] - a[k]) * f;
+        result[id] = v;
+    }
+    return result;
+}
+
 void writeAnimation(string path)
 {
     auto allPoses = poses();
