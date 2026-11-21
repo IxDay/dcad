@@ -1,0 +1,83 @@
+name "dcad"
+description "Statically typed CAD scripting in D, bound directly to OpenCASCADE"
+authors "dcad contributors"
+copyright "Copyright (c) 2026"
+license "LGPL-2.1-or-later"
+
+targetType "library"
+sourcePaths "source"
+importPaths "source"
+
+# OpenCASCADE's C++ runtime and libraries. Linux first; the macOS settings
+# are only there so this repo can be developed on Apple Silicon too (same
+# Itanium C++ ABI, so the extern(C++) declarations are identical).
+libs "TKernel" "TKMath" "TKG2d" "TKG3d" "TKGeomBase" "TKGeomAlgo" \
+     "TKBRep" "TKTopAlgo" "TKPrim" "TKBO" "TKBool" "TKFillet" "TKOffset" \
+     "TKXSBase" "TKDE" "TKDESTEP" "TKMesh" platform="posix"
+libs "stdc++" platform="linux"
+libs "c++" platform="osx"
+lflags "-L/opt/homebrew/lib" "-rpath" "/opt/homebrew/lib" platform="osx"
+lflags "-L/usr/local/lib" platform="osx"
+
+# The tiny C++ shim: only for API that extern(C++) cannot express
+# (OCCT inline accessors, Handle types, and C++ exception containment).
+preBuildCommands "$PACKAGE_DIR/tools/build-shim.sh" platform="posix"
+lflags "$PACKAGE_DIR/build/libdcad_shim.a" platform="posix"
+extraDependencyFiles "shim/dcad_shim.cpp" "shim/dcad_shim.h" "tools/build-shim.sh"
+
+subPackage {
+    name "simple-box"
+    targetType "executable"
+    targetName "simple-box"
+    sourcePaths "examples/simple_box"
+    importPaths "source"
+    dependency "dcad" version="*"
+}
+
+subPackage {
+    name "box-hole-fillet"
+    targetType "executable"
+    targetName "box-hole-fillet"
+    sourcePaths "examples/box_hole_fillet"
+    importPaths "source"
+    dependency "dcad" version="*"
+}
+
+subPackage {
+    name "loft"
+    targetType "executable"
+    targetName "loft"
+    sourcePaths "examples/loft"
+    importPaths "source"
+    dependency "dcad" version="*"
+}
+
+subPackage {
+    name "coffee-table"
+    targetType "executable"
+    targetName "coffee-table"
+    sourcePaths "samples/coffee-table"
+    importPaths "samples/coffee-table" "source"
+    dependency "dcad" version="*"
+}
+
+# Native GUI shell: GLFW + ImGui (docking) + raw OpenGL + hot-loaded D scripts.
+subPackage {
+    name "gui"
+    targetType "executable"
+    targetName "dcad-gui"
+    sourcePaths "gui/source"
+    importPaths "gui/source" "source"
+    dependency "dcad" version="*"
+    dependency "bindbc-glfw" version="~>1.1"
+    subConfiguration "bindbc-glfw" "static"
+    dependency "bindbc-opengl" version="~>1.1"
+    versions "GL_30"
+
+    preBuildCommands "$PACKAGE_DIR/gui/tools/build-gui-shim.sh" platform="osx"
+    lflags "$PACKAGE_DIR/build/libdcad_gui_shim.a" platform="osx"
+    libs "glfw" platform="osx"
+    lflags "-L/opt/homebrew/lib" "-rpath" "/opt/homebrew/lib" platform="osx"
+    lflags "-framework" "OpenGL" platform="osx"
+    extraDependencyFiles "gui/shim/dcad_gui_shim.cpp" "gui/tools/build-gui-shim.sh"
+}

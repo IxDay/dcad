@@ -1,0 +1,16 @@
+/.dub/
+/build/
+*.o
+*.a
+*.step
+/box-hole-fillet
+/simple-box
+/loft
+/coffee-table
+/dcad-gui
+/table/
+/.dcad-gui-state
+/.dcad-gui-scripts/
+/dcad-export.step
+/imgui.ini
+/dub.selections.json
