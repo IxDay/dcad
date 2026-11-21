@@ -83,6 +83,7 @@ void main(string[] args)
 
     auto host = new ScriptHost(workDir, repoRoot());
     auto viewport = new Viewport();
+    scope(exit) viewport.dispose(); // context is still current at scope exit
 
     // Restore last script (Phase 4 persistence, trivial here).
     if (exists(stateFile))

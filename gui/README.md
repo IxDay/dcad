@@ -36,15 +36,16 @@ re-docked. Both the UI chrome and the 3D render use the light brocanth palette.
 A script opts into playback by defining two extra locals alongside `result`:
 
 ```d
-auto animParts = parts;                                  // .id + .shape each
-double[3][string] delegate(double) animPose = (t) => poseAt(t);
+auto animParts = parts;            // .id + .shape for each moving part
+auto animPoses = allPoses();       // double[3][string][] keyframes, t in [0,1]
 ```
 
 The wrapper exports them over the plugin ABI. Each part is meshed **once**;
 playback only uploads one translation uniform per part per frame, so the 18-part
-coffee-table animation runs without any OCCT work in the render loop. See
-[`scripts/coffee-table-animation.d`](scripts/coffee-table-animation.d) for the
-full script, and `coffee_motion.poseAt()` for the keyframed knock-down motion.
+coffee-table animation runs without any OCCT work in the render loop. Keyframes
+are plain data (no delegates), so nothing outlives the script's stack frame.
+See [`scripts/coffee-table-animation.d`](scripts/coffee-table-animation.d) for
+the full script, and `coffee_motion.allPoses()` for the knock-down keyframes.
 
 ## Script contract
 

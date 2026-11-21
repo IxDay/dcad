@@ -127,6 +127,12 @@ private Pose[] poses()
     return result;
 }
 
+/// All keyframes, for consumers (such as the GUI) that interpolate themselves.
+double[3][string][] allPoses()
+{
+    return poses();
+}
+
 /**
  * Sample the staged knock-down motion at normalised time t in [0, 1].
  * Used by the GUI preview; the JSON writer below stays the source of truth
@@ -165,9 +171,9 @@ double[3][string] poseAt(double t)
 
 void writeAnimation(string path)
 {
-    auto allPoses = poses();
+    auto keyframes = poses();
     string[] ids;
-    foreach (pose; allPoses)
+    foreach (pose; keyframes)
         foreach (id, _; pose)
             if (!ids.idIndexOf(id))
                 ids ~= id;
@@ -178,7 +184,7 @@ void writeAnimation(string path)
     {
         JSONValue[] times;
         JSONValue[] values;
-        foreach (i, pose; allPoses)
+        foreach (i, pose; keyframes)
         {
             times ~= JSONValue(cast(long) i);
             double[3] t = [0.0, 0.0, 0.0];

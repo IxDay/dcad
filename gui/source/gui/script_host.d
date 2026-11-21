@@ -31,7 +31,8 @@ import dcad.shape : Shape;
 import dcad.dsl.workplane : Workplane;
 import dcad.dsl.selector : FaceSelector, EdgeSelector;
 import dcad.occt.types : TopAbs_ShapeEnum;
-import dcad.occt.topology : dcad_shape_clone;
+import dcad.occt.topology : dcad_shape_clone, dcad_shape_free;
+import core.stdc.stdlib : malloc, free;
 import std.math : abs, sqrt, PI, sin, cos, floor, ceil;
 import std.array;
 import std.algorithm;
@@ -59,12 +60,18 @@ private Shape toShape(T)(T value) {
 /* Optional animation protocol. A script opts in by defining, inside its own
  * source (which is injected into dcad_script_run), these two locals:
  *   auto animParts = <array of NamedPart-like values with .id and .shape>;
- *   double[3][string] delegate(double) animPose = (t) => ...; // t in [0,1]
- * They are copied into module globals from the epilogue, where they are in
- * scope. Non-animated scripts pay nothing. */
-private Shape[] g_animShapes;
-private string[] g_animIds;
-private double[3][string] delegate(double) g_animPose;
+ *   auto animPoses = <array of double[3][string] keyframes>; // t in [0,1]
+ *
+ * The data is copied into malloc'd buffers, NOT GC-managed plugin globals:
+ * the plugin's static data is not necessarily a GC root for the host's
+ * collector, so AA/array globals get collected between frames. C++ shape
+ * clones are used for the same reason. Scripts that do not opt in pay
+ * nothing. */
+private void** g_animShapePtrs;
+private size_t g_animShapeCount;
+private double* g_poseData;
+private size_t g_poseFrames;
+private size_t g_poseParts;
 
 extern(C) export void* dcad_script_run()
 {
@@ -75,16 +82,34 @@ PRELUDE_END";
 private enum string epilogue = q"EPILOGUE_END
         // Capture optional animation hooks while the script's locals are in
         // scope (the generated source is inserted inside this function).
-        static if (is(typeof(animParts)))
+        static if (is(typeof(animParts)) && is(typeof(animPoses)))
         {
-            foreach (p; animParts)
+            immutable np = animParts.length;
+            immutable nf = animPoses.length;
+            g_animShapeCount = np;
+            g_poseFrames = nf;
+            g_poseParts = np;
+            if (np > 0)
+                g_animShapePtrs = cast(void**) malloc(np * size_t.sizeof);
+            if (nf > 0 && np > 0)
             {
-                g_animShapes ~= toShape(p.shape);
-                g_animIds ~= p.id;
+                g_poseData = cast(double*) malloc(nf * np * 3 * double.sizeof);
+                if (g_poseData !is null)
+                    foreach (k; 0 .. nf * np * 3)
+                        g_poseData[k] = 0.0;
+            }
+            foreach (i, p; animParts)
+            {
+                auto s = toShape(p.shape);
+                if (g_animShapePtrs !is null)
+                    g_animShapePtrs[i] = dcad_shape_clone(&s.native());
+                if (g_poseData !is null)
+                    foreach (fi, pose; animPoses)
+                        if (auto v = p.id in pose)
+                            foreach (k; 0 .. 3)
+                                g_poseData[(fi * np + i) * 3 + k] = (*v)[k];
             }
         }
-        static if (is(typeof(animPose)))
-            g_animPose = animPose;
 
         Shape finalShape = toShape(result);
         return cast(void*) dcad_shape_clone(&finalShape.native());
@@ -103,33 +128,49 @@ extern(C) export const(char)* dcad_script_error()
 
 extern(C) export int dcad_anim_part_count()
 {
-    return cast(int) g_animShapes.length;
+    return cast(int) g_animShapeCount;
 }
 
 extern(C) export const(void)* dcad_anim_part_shape(int i)
 {
-    if (i < 0 || i >= g_animShapes.length) return null;
-    return cast(const(void)*)&g_animShapes[i].native();
+    if (i < 0 || i >= g_animShapeCount || g_animShapePtrs is null) return null;
+    return g_animShapePtrs[i];
 }
 
-extern(C) export const(char)* dcad_anim_part_id(int i)
-{
-    if (i < 0 || i >= g_animIds.length) return null;
-    return (g_animIds[i] ~ "\0").ptr;
-}
-
+/// Linear interpolation between keyframes, written as dx/dy/dz per part.
 extern(C) export void dcad_anim_pose(double t, double* offsets)
 {
-    if (g_animPose is null) return;
-    auto pose = g_animPose(t);
-    foreach (i, id; g_animIds)
+    if (g_poseData is null || g_poseFrames == 0 || g_poseParts == 0) return;
+    immutable last = g_poseFrames - 1;
+    immutable x = (t < 0 ? 0 : t > 1 ? 1 : t) * cast(double) last;
+    immutable i0 = cast(size_t) x;
+    immutable i1 = i0 < last ? i0 + 1 : last;
+    immutable f = x - cast(double) i0;
+    foreach (p; 0 .. g_poseParts)
+        foreach (k; 0 .. 3)
+        {
+            immutable a = g_poseData[(i0 * g_poseParts + p) * 3 + k];
+            immutable b = g_poseData[(i1 * g_poseParts + p) * 3 + k];
+            offsets[p * 3 + k] = a + (b - a) * f;
+        }
+}
+
+/// Release C-owned buffers before dlclose().
+extern(C) export void dcad_anim_free()
+{
+    if (g_animShapePtrs !is null)
     {
-        double[3] v = [0.0, 0.0, 0.0];
-        if (auto p = id in pose) v = *p;
-        offsets[i * 3 + 0] = v[0];
-        offsets[i * 3 + 1] = v[1];
-        offsets[i * 3 + 2] = v[2];
+        foreach (i; 0 .. g_animShapeCount)
+            if (g_animShapePtrs[i] !is null)
+                dcad_shape_free(g_animShapePtrs[i]);
+        free(g_animShapePtrs);
     }
+    if (g_poseData !is null) free(g_poseData);
+    g_animShapePtrs = null;
+    g_poseData = null;
+    g_animShapeCount = 0;
+    g_poseFrames = 0;
+    g_poseParts = 0;
 }
 EPILOGUE_END";
 
@@ -257,16 +298,6 @@ public:
         return fn is null ? null : fn(i);
     }
 
-    string animPartId(int i)
-    {
-        if (handle is null) return null;
-        alias Fn = extern(C) const(char)* function(int);
-        auto fn = cast(Fn) dlsym(handle, "dcad_anim_part_id");
-        if (fn is null) return null;
-        auto p = fn(i);
-        return p is null ? null : fromStringz(p).idup;
-    }
-
     /// 3 doubles (dx,dy,dz) per part at normalised time t.
     double[] animPose(double t, int count)
     {
@@ -284,6 +315,10 @@ private:
     {
         if (handle !is null)
         {
+            // Free C-owned animation buffers while the plugin is still loaded.
+            alias FreeFn = extern(C) void function();
+            auto freeFn = cast(FreeFn) dlsym(handle, "dcad_anim_free");
+            if (freeFn !is null) freeFn();
             dlclose(handle);
             handle = null;
         }

@@ -137,6 +137,7 @@ private:
     MeshGpu[] partMeshes;
     float[3][] partOffsets;
     bool diagnosticsDone;
+    bool disposed;
 
     int width = 64;
     int height = 64;
@@ -156,11 +157,24 @@ public:
 
     ~this()
     {
+        // GL resources must be released by dispose() while the context is
+        // current. A GC finalizer runs at an arbitrary time -- possibly after
+        // GLFW destroyed the context -- so it must not touch GL here.
+    }
+
+    /// Release GL resources explicitly, before the window/context goes away.
+    void dispose()
+    {
+        if (disposed) return;
+        disposed = true;
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
         clearMesh();
         if (depthRb) glDeleteRenderbuffers(1, &depthRb);
         if (colorTex) glDeleteTextures(1, &colorTex);
         if (fbo) glDeleteFramebuffers(1, &fbo);
+        glUseProgram(0);
         if (program) glDeleteProgram(program);
+        depthRb = colorTex = fbo = program = 0;
     }
 
     /// The FBO colour texture, for display via ImGui::Image.
