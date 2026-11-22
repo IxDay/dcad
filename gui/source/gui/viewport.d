@@ -47,6 +47,17 @@ private Mat4 perspective(float fovY, float aspect, float near_, float far_)
     return m;
 }
 
+private Mat4 ortho(float halfW, float halfH, float near_, float far_)
+{
+    Mat4 m = 0;
+    m[0] = 1 / halfW;
+    m[5] = 1 / halfH;
+    m[10] = -2 / (far_ - near_);
+    m[14] = -(far_ + near_) / (far_ - near_);
+    m[15] = 1;
+    return m;
+}
+
 private Mat4 lookAt(float[3] eye, float[3] center, float[3] up)
 {
     float[3] f = [center[0] - eye[0], center[1] - eye[1], center[2] - eye[2]];
@@ -111,6 +122,27 @@ void main()
 }
 FS";
 
+// Lines for the OpenSCAD-style axis cross and ground grid.
+private enum lineVertexShaderSrc = q"LVS
+#version 120
+attribute vec3 aPosition;
+attribute vec3 aColor;
+uniform mat4 uProj;
+uniform mat4 uView;
+varying vec3 vColor;
+void main()
+{
+    vColor = aColor;
+    gl_Position = uProj * uView * vec4(aPosition, 1.0);
+}
+LVS";
+
+private enum lineFragmentShaderSrc = q"LFS
+#version 120
+varying vec3 vColor;
+void main() { gl_FragColor = vec4(vColor, 1.0); }
+LFS";
+
 /// A snapshot of mesh data owned by the viewport.
 private struct MeshGpu
 {
@@ -133,6 +165,17 @@ private:
     int offsetLoc;
     int posLoc;
     int normLoc;
+    uint lineProgram;
+    uint guideVbo;
+    int lineProjLoc;
+    int lineViewLoc;
+    int linePosLoc;
+    int lineColorLoc;
+    int guideVertexCount;
+    bool showAxes = true;
+    bool showGrid = true;
+    bool wireframe;
+    bool orthographic;
     MeshGpu mesh;
     MeshGpu[] partMeshes;
     float[3][] partOffsets;
@@ -174,7 +217,9 @@ public:
         if (fbo) glDeleteFramebuffers(1, &fbo);
         glUseProgram(0);
         if (program) glDeleteProgram(program);
-        depthRb = colorTex = fbo = program = 0;
+        if (lineProgram) glDeleteProgram(lineProgram);
+        if (guideVbo) glDeleteBuffers(1, &guideVbo);
+        depthRb = colorTex = fbo = program = lineProgram = guideVbo = 0;
     }
 
     /// The FBO colour texture, for display via ImGui::Image.
@@ -300,12 +345,48 @@ private:
             if (span > maxSpan) maxSpan = span;
         }
         mesh.radius = maxSpan > 0 ? maxSpan / 2 : 1;
+        rebuildGuides(lo[2]);
         if (!cameraInitialized)
         {
             target = mesh.center;
             distance = mesh.radius * 3.2f + 10;
             cameraInitialized = true;
         }
+    }
+
+    /// Grid + axis-cross geometry, rebuilt whenever a new mesh is framed.
+    private void rebuildGuides(float baseZ)
+    {
+        float[] v;
+        immutable cx = mesh.center[0];
+        immutable cy = mesh.center[1];
+        immutable z = baseZ - 0.5f;
+        immutable ext = mesh.radius * 2.2f;
+        float[3] grey = [0.82f, 0.85f, 0.89f];
+        foreach (i; 0 .. 11)
+        {
+            immutable f = -ext + 2 * ext * i / 10.0f;
+            addLine(v, [cx + f, cy - ext, z], [cx + f, cy + ext, z], grey);
+            addLine(v, [cx - ext, cy + f, z], [cx + ext, cy + f, z], grey);
+        }
+        immutable len = mesh.radius * 1.3f;
+        addLine(v, [cx, cy, z], [cx + len, cy, z], [0.86f, 0.22f, 0.22f]);
+        addLine(v, [cx, cy, z], [cx, cy + len, z], [0.16f, 0.64f, 0.28f]);
+        addLine(v, [cx, cy, z], [cx, cy, z + len], [0.20f, 0.36f, 0.86f]);
+        addLine(v, [cx, cy, z], [cx - len, cy, z], [0.94f, 0.68f, 0.68f]);
+        addLine(v, [cx, cy, z], [cx, cy - len, z], [0.68f, 0.87f, 0.70f]);
+
+        glBindBuffer(GL_ARRAY_BUFFER, guideVbo);
+        glBufferData(GL_ARRAY_BUFFER, v.length * float.sizeof,
+                     v.ptr, GL_STATIC_DRAW);
+        guideVertexCount = cast(int)(v.length / 6);
+    }
+
+    private static void addLine(ref float[] v, float[3] a, float[3] b,
+                                float[3] c)
+    {
+        v ~= [a[0], a[1], a[2], c[0], c[1], c[2],
+              b[0], b[1], b[2], c[0], c[1], c[2]];
     }
 
 public:
@@ -332,14 +413,43 @@ public:
         if (distance < 1) distance = 1;
     }
 
-    void resetCamera()
+    /// OpenSCAD-style view presets. All keep the current zoom/target.
+    void setView(float newYaw, float newPitch)
+    {
+        yaw = newYaw;
+        pitch = newPitch;
+    }
+
+    void viewIso()   { setView(0.7f, 0.5f); }
+    void viewTop()   { setView(-PI / 2, 1.55f); }
+    void viewBottom(){ setView(-PI / 2, -1.55f); }
+    void viewFront() { setView(-PI / 2, 0); }
+    void viewBack()  { setView(PI / 2, 0); }
+    void viewRight() { setView(0, 0); }
+    void viewLeft()  { setView(PI, 0); }
+
+    void fitAll()
     {
         if (!cameraInitialized) return;
         target = mesh.center;
         distance = mesh.radius * 3.2f + 10;
-        yaw = 0.7f;
-        pitch = 0.5f;
     }
+
+    void resetCamera()
+    {
+        viewIso();
+        fitAll();
+    }
+
+    // Display toggles mirrored from the preview toolbar.
+    void setAxes(bool v) { showAxes = v; }
+    bool axesEnabled() const { return showAxes; }
+    void setGrid(bool v) { showGrid = v; }
+    bool gridEnabled() const { return showGrid; }
+    void setWireframe(bool v) { wireframe = v; }
+    bool wireframeEnabled() const { return wireframe; }
+    void setOrthographic(bool v) { orthographic = v; }
+    bool orthographicEnabled() const { return orthographic; }
 
     /// Render into the FBO. `w`/`h` are in framebuffer pixels.
     void render(int w, int h)
@@ -361,8 +471,15 @@ public:
         if (mesh.vertexCount > 0 || partMeshes.length > 0)
         {
             const aspect = cast(float) width / height;
-            auto proj = perspective(0.8f, aspect, 0.1f,
-                                    max(distance * 10, 1000f));
+            immutable far_ = max(distance * 10, 1000f);
+            Mat4 proj;
+            if (orthographic)
+            {
+                immutable halfH = distance * tan(0.8f / 2);
+                proj = ortho(halfH * aspect, halfH, 0.1f, far_);
+            }
+            else
+                proj = perspective(0.8f, aspect, 0.1f, far_);
             const cp = cos(pitch);
             float[3] eye = [
                 target[0] + distance * cp * cos(yaw),
@@ -371,10 +488,14 @@ public:
             ];
             auto view = lookAt(eye, target, [0f, 0f, 1f]);
 
+            if (showAxes || showGrid)
+                drawGuides(proj, view);
+
             glUseProgram(program);
             glUniformMatrix4fv(projLoc, 1, GL_FALSE, proj.ptr);
             glUniformMatrix4fv(viewLoc, 1, GL_FALSE, view.ptr);
 
+            if (wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
             if (mesh.vertexCount > 0)
             {
                 float[3] zero = [0f, 0f, 0f];
@@ -383,6 +504,7 @@ public:
             else
                 foreach (i, ref p; partMeshes)
                     drawMesh(p, partOffsets[i]);
+            if (wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
             glDisableVertexAttribArray(posLoc);
             glDisableVertexAttribArray(normLoc);
@@ -398,6 +520,24 @@ public:
 
 private:
     static float max(float a, float b) { return a > b ? a : b; }
+
+    void drawGuides(ref Mat4 proj, ref Mat4 view)
+    {
+        if (guideVertexCount <= 0) return;
+        glUseProgram(lineProgram);
+        glUniformMatrix4fv(lineProjLoc, 1, GL_FALSE, proj.ptr);
+        glUniformMatrix4fv(lineViewLoc, 1, GL_FALSE, view.ptr);
+        glBindBuffer(GL_ARRAY_BUFFER, guideVbo);
+        enum size_t stride = 6 * float.sizeof;
+        glVertexAttribPointer(linePosLoc, 3, GL_FLOAT, GL_FALSE, stride, null);
+        glVertexAttribPointer(lineColorLoc, 3, GL_FLOAT, GL_FALSE, stride,
+                              cast(void*) cast(size_t)(3 * float.sizeof));
+        glEnableVertexAttribArray(linePosLoc);
+        glEnableVertexAttribArray(lineColorLoc);
+        glDrawArrays(GL_LINES, 0, guideVertexCount);
+        glDisableVertexAttribArray(linePosLoc);
+        glDisableVertexAttribArray(lineColorLoc);
+    }
 
     void drawMesh(ref MeshGpu g, ref float[3] off)
     {
@@ -421,6 +561,12 @@ private:
         normLoc = glGetAttribLocation(program, "aNormal");
         stderr.writefln("viewport: program=%u proj=%d view=%d pos=%d norm=%d",
                         program, projLoc, viewLoc, posLoc, normLoc);
+        lineProgram = createProgram(lineVertexShaderSrc, lineFragmentShaderSrc);
+        lineProjLoc = glGetUniformLocation(lineProgram, "uProj");
+        lineViewLoc = glGetUniformLocation(lineProgram, "uView");
+        linePosLoc = glGetAttribLocation(lineProgram, "aPosition");
+        lineColorLoc = glGetAttribLocation(lineProgram, "aColor");
+        glGenBuffers(1, &guideVbo);
         glGenFramebuffers(1, &fbo);
         glGenTextures(1, &colorTex);
         glGenRenderbuffers(1, &depthRb);

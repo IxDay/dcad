@@ -251,6 +251,22 @@ extern "C" int dcad_gui_slider_float(const char* label, float* v, float vmin, fl
 {
     return ImGui::SliderFloat(label, v, vmin, vmax) ? 1 : 0;
 }
+extern "C" int dcad_gui_checkbox(const char* label, int* v)
+{
+    bool value = *v != 0;
+    bool changed = ImGui::Checkbox(label, &value);
+    *v = value ? 1 : 0;
+    return changed ? 1 : 0;
+}
+extern "C" int dcad_gui_input_float(const char* label, float* v, float step)
+{
+    return ImGui::InputFloat(label, v, step, 0.0f, "%.2f") ? 1 : 0;
+}
+extern "C" int dcad_gui_input_int(const char* label, int* v, int step)
+{
+    return ImGui::InputInt(label, v, step) ? 1 : 0;
+}
+extern "C" void dcad_gui_set_next_item_width(float w) { ImGui::SetNextItemWidth(w); }
 
 /* --------------------------------------------------------------------------
  * Input state

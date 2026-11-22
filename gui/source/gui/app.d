@@ -10,7 +10,7 @@ module gui.app;
 import std.stdio : stderr, writeln;
 import std.file : mkdirRecurse, exists, readText, write;
 import std.path : buildPath;
-import std.string : toStringz;
+import std.string : toStringz, format;
 import std.conv : to;
 
 import bindbc.glfw;
@@ -105,10 +105,17 @@ void main(string[] args)
     // per-part translation uniform, so playback is independent of OCCT.
     bool hasAnimation;
     bool animPlaying;
-    double animTime;
-    double animSpeed = 1.0;
-    enum double animDuration = 8.0; // seconds for the full open/close cycle
+    double animTime;              // seconds into the current cycle
+    float animFps = 10.0f;        // OpenSCAD-style animation settings
+    int animSteps = 100;
     double lastFrameTime = glfwGetTime();
+
+    /// One full cycle takes `steps / fps` seconds, as in OpenSCAD.
+    double cycleSeconds()
+    {
+        return animSteps > 0 && animFps > 0
+            ? cast(double) animSteps / animFps : 1.0;
+    }
 
     void doRunScript()
     {
@@ -245,26 +252,40 @@ void main(string[] args)
             float x, y, w, h;
             dcad_gui_get_window_pos(&x, &y);
             dcad_gui_get_window_size(&w, &h);
-            immutable imgW = w - 16 > 16 ? w - 16 : 16;
-            immutable imgH = h - 48 > 16 ? h - 48 : 16;
 
-            // Camera interaction: use IO mouse delta while the window is hovered.
-            if (dcad_gui_is_window_hovered())
-            {
-                float dx, dy;
-                dcad_gui_get_io_mouse_delta(&dx, &dy);
-                if (dcad_gui_mouse_down(mouseLeft))
-                    viewport.orbit(dx, dy);
-                else if (dcad_gui_mouse_down(mouseMiddle) ||
-                         dcad_gui_mouse_down(mouseRight))
-                    viewport.pan(dx, dy);
+            // --- OpenSCAD-style view toolbar -------------------------------
+            if (dcad_gui_button("Fit")) viewport.fitAll();
+            dcad_gui_same_line();
+            if (dcad_gui_button("Iso")) viewport.viewIso();
+            dcad_gui_same_line();
+            if (dcad_gui_button("Top")) viewport.viewTop();
+            dcad_gui_same_line();
+            if (dcad_gui_button("Bottom")) viewport.viewBottom();
+            dcad_gui_same_line();
+            if (dcad_gui_button("Front")) viewport.viewFront();
+            dcad_gui_same_line();
+            if (dcad_gui_button("Back")) viewport.viewBack();
+            dcad_gui_same_line();
+            if (dcad_gui_button("Right")) viewport.viewRight();
+            dcad_gui_same_line();
+            if (dcad_gui_button("Left")) viewport.viewLeft();
 
-                const wheel = dcad_gui_get_mouse_wheel_y();
-                if (wheel != 0)
-                    viewport.zoom(wheel);
-            }
+            int flag = viewport.axesEnabled() ? 1 : 0;
+            if (dcad_gui_checkbox("Axes", &flag)) viewport.setAxes(flag != 0);
+            dcad_gui_same_line();
+            flag = viewport.gridEnabled() ? 1 : 0;
+            if (dcad_gui_checkbox("Grid", &flag)) viewport.setGrid(flag != 0);
+            dcad_gui_same_line();
+            flag = viewport.wireframeEnabled() ? 1 : 0;
+            if (dcad_gui_checkbox("Wireframe", &flag))
+                viewport.setWireframe(flag != 0);
+            dcad_gui_same_line();
+            flag = viewport.orthographicEnabled() ? 1 : 0;
+            if (dcad_gui_checkbox("Ortho", &flag))
+                viewport.setOrthographic(flag != 0);
 
-            // Mesh quality slider: re-mesh the current shape when it changes.
+            dcad_gui_same_line();
+            dcad_gui_set_next_item_width(150);
             if (dcad_gui_slider_float("Deflection", &deflection, 0.05f, 5.0f) != 0 &&
                 currentShape !is null)
             {
@@ -284,29 +305,27 @@ void main(string[] args)
                         cast(const(void)*)&currentShape.native(), deflection);
                 status = "Remeshed - " ~ tris.to!string ~ " triangles";
             }
+            dcad_gui_separator();
 
-            // Animation transport, only shown for scripts that opt in.
-            if (hasAnimation)
+            // Reserve room for the toolbar above and the animation panel below.
+            immutable imgW = w - 16 > 16 ? w - 16 : 16;
+            immutable canvasH = h - (hasAnimation ? 236f : 126f);
+            immutable imgH = canvasH > 120 ? canvasH : 120;
+
+            // Camera interaction: left drag orbit, right/middle drag pan, wheel zoom.
+            if (dcad_gui_is_window_hovered())
             {
-                dcad_gui_separator();
-                dcad_gui_text_colored("ASSEMBLY ANIMATION".toStringz,
-                                      0.38f, 0.35f, 0.61f, 1);
-                if (dcad_gui_button(animPlaying ? "Pause" : "Play"))
-                    animPlaying = !animPlaying;
-                dcad_gui_same_line();
-                if (dcad_gui_button("Restart"))
-                {
-                    animTime = 0;
-                    animPlaying = true;
-                }
+                float dx, dy;
+                dcad_gui_get_io_mouse_delta(&dx, &dy);
+                if (dcad_gui_mouse_down(mouseLeft))
+                    viewport.orbit(dx, dy);
+                else if (dcad_gui_mouse_down(mouseMiddle) ||
+                         dcad_gui_mouse_down(mouseRight))
+                    viewport.pan(dx, dy);
 
-                float speedF = cast(float) animSpeed;
-                if (dcad_gui_slider_float("Speed", &speedF, 0.1f, 3.0f) != 0)
-                    animSpeed = speedF;
-
-                float timeF = cast(float)(animTime / animDuration);
-                if (dcad_gui_slider_float("Timeline", &timeF, 0f, 1f) != 0)
-                    animTime = timeF * animDuration;
+                const wheel = dcad_gui_get_mouse_wheel_y();
+                if (wheel != 0)
+                    viewport.zoom(wheel);
             }
 
             // Advance the animation. Only a translation uniform is uploaded;
@@ -314,11 +333,12 @@ void main(string[] args)
             immutable now = glfwGetTime();
             if (hasAnimation)
             {
+                immutable cycle = cycleSeconds();
                 if (animPlaying)
-                    animTime += (now - lastFrameTime) * animSpeed;
-                while (animTime > animDuration)
-                    animTime -= animDuration;
-                viewport.setOffsets(host.animPose(animTime / animDuration,
+                    animTime += now - lastFrameTime;
+                while (animTime >= cycle)
+                    animTime -= cycle;
+                viewport.setOffsets(host.animPose(animTime / cycle,
                                                   host.animPartCount()));
             }
             lastFrameTime = now;
@@ -328,6 +348,43 @@ void main(string[] args)
             immutable ph = cast(int)(imgH * 2);
             viewport.render(pw, ph);
             dcad_gui_image(viewport.textureID(), imgW, imgH);
+
+            // --- OpenSCAD-style animation panel -----------------------------
+            if (hasAnimation)
+            {
+                dcad_gui_separator();
+                if (dcad_gui_begin_child("##animation", 0, 112, childFlagsBorders))
+                {
+                    int animate = animPlaying ? 1 : 0;
+                    if (dcad_gui_checkbox("Animate", &animate))
+                        animPlaying = animate != 0;
+                    dcad_gui_same_line();
+                    if (dcad_gui_button("Restart"))
+                    {
+                        animTime = 0;
+                        animPlaying = true;
+                    }
+                    dcad_gui_same_line();
+                    immutable tNorm = animTime / cycleSeconds();
+                    dcad_gui_text(("  $t = " ~ format("%.2f", tNorm)).toStringz);
+
+                    float timeF = cast(float) animTime;
+                    dcad_gui_set_next_item_width(240);
+                    if (dcad_gui_slider_float("Time", &timeF, 0,
+                                              cast(float) cycleSeconds()) != 0)
+                        animTime = timeF;
+
+                    dcad_gui_set_next_item_width(90);
+                    if (dcad_gui_input_float("FPS", &animFps, 1) != 0 && animFps < 1)
+                        animFps = 1;
+                    dcad_gui_same_line();
+                    dcad_gui_set_next_item_width(90);
+                    if (dcad_gui_input_int("Steps", &animSteps, 1) != 0 &&
+                        animSteps < 1)
+                        animSteps = 1;
+                }
+                dcad_gui_end_child();
+            }
         }
         dcad_gui_end();
 

@@ -23,15 +23,28 @@ script, press **Cmd/Ctrl+Enter** (or click **Run**) to recompile and re-mesh.
 | Orbit | Left-drag in the viewport |
 | Pan | Middle/Right-drag in the viewport |
 | Zoom | Scroll over the viewport |
-| Reset camera | `Reset camera` button |
+| Standard view | `Fit`, `Iso`, `Top`, `Bottom`, `Front`, `Back`, `Right`, `Left` |
+| Display toggles | `Axes`, `Grid`, `Wireframe`, `Ortho` checkboxes |
 | Export STEP | `Export STEP` button → writes `dcad-export.step` |
 | Save script | `Save script` button → writes `.dcad-gui-state` |
-| Animate | Play / Pause / Restart, Speed and Timeline sliders (animated scripts only) |
+| Animate | `Animate` checkbox, `Restart`, `Time`, `FPS`, `Steps` (animated scripts only) |
 
 The two panes use a fixed 44% / 56% split: they cannot be dragged, resized or
 re-docked. Both the UI chrome and the 3D render use the light brocanth palette.
 
+### Preview toolbar
+
+The viewport has an OpenSCAD-in-VS-Code style toolbar. The first row frames the
+model or switches to one of the six standard views plus the default axonometric
+view. The second row toggles the axis cross, ground grid, wireframe rendering
+and orthographic projection. `Deflection` controls OCCT mesh density.
+
 ### Animation
+
+The animation panel follows OpenSCAD's animation window: **Animate** starts and
+pauses playback, **Time** scrubs through the cycle in seconds, and one cycle
+takes `Steps / FPS` seconds. `$t` is the normalised position (0 → 1) passed to
+the script's keyframe sampler.
 
 A script opts into playback by defining two extra locals alongside `result`:
 

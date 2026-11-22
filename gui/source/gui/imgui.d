@@ -86,6 +86,10 @@ extern(C) nothrow @nogc
                             int selected, int enabled);
     int  dcad_gui_slider_float(const(char)* label, float* v,
                                float vmin, float vmax);
+    int  dcad_gui_checkbox(const(char)* label, int* v);
+    int  dcad_gui_input_float(const(char)* label, float* v, float step);
+    int  dcad_gui_input_int(const(char)* label, int* v, int step);
+    void dcad_gui_set_next_item_width(float w);
 
     // input
     void  dcad_gui_get_mouse_delta(float* x, float* y);
