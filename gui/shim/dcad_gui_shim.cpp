@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <cstdio>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -25,6 +26,31 @@ struct GLFWwindow;
  * ImGui lifecycle
  * -------------------------------------------------------------------------- */
 
+static void loadGuiFont(ImGuiIO& io)
+{
+    // Nerd Font PUA glyphs are used for file icons and the preview toolbar.
+    static ImWchar glyphRanges[] = {0x0020, 0x00FF, 0xE000, 0xF8FF, 0};
+    char homeFont[1024] = {0};
+    if (const char* home = std::getenv("HOME"))
+        std::snprintf(homeFont, sizeof(homeFont),
+                      "%s/Library/Fonts/mesloLGS_NF_regular.ttf", home);
+
+    const char* candidates[] = {
+        "gui/assets/MesloLGS_NF_Regular.ttf",
+        homeFont,
+    };
+    for (const char* path : candidates)
+    {
+        if (!path || !*path) continue;
+        FILE* f = std::fopen(path, "rb");
+        if (!f) continue;
+        std::fclose(f);
+        io.Fonts->AddFontFromFileTTF(path, 15.0f, nullptr, glyphRanges);
+        return;
+    }
+    io.Fonts->AddFontDefault();
+}
+
 extern "C" void dcad_gui_init(void* window, const char* glslVersion)
 {
     IMGUI_CHECKVERSION();
@@ -32,6 +58,7 @@ extern "C" void dcad_gui_init(void* window, const char* glslVersion)
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    loadGuiFont(io);
 
     ImGui_ImplGlfw_InitForOpenGL(static_cast<GLFWwindow*>(window), true);
     ImGui_ImplOpenGL3_Init(glslVersion ? glslVersion : "#version 150");
@@ -304,6 +331,11 @@ extern "C" int dcad_gui_button(const char* label)
     ImGui::PopStyleVar(2);
     ImGui::PopStyleColor();
     return pressed ? 1 : 0;
+}
+extern "C" void dcad_gui_set_item_tooltip(const char* text)
+{
+    if (text && ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", text);
 }
 extern "C" void dcad_gui_same_line(void) { ImGui::SameLine(); }
 extern "C" void dcad_gui_separator(void) { ImGui::Separator(); }

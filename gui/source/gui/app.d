@@ -37,14 +37,56 @@ Shape result = model.shape;
 };
 
 private enum string stateFile = ".dcad-gui-state";
-private enum float sidebarExpandedWidth = 220f;
-private enum float sidebarRailWidth = 34f;
+private enum float sidebarWidth = 220f;
+private enum float partsWidth = 190f;
+
+// Nerd Font glyphs (same icon set for the tree and the preview toolbar).
+private enum iconFolder      = "\uF07B";
+private enum iconFolderOpen  = "\uF07C";
+private enum iconFile        = "\uF15B";
+private enum iconFileCode    = "\uF1C9";
+private enum iconFileText    = "\uF0F6";
+private enum iconTerminal    = "\uF489";
+private enum iconCube        = "\uF1B2";
+private enum iconFit         = "\uF0B2";
+private enum iconUp          = "\uF062";
+private enum iconDown        = "\uF063";
+private enum iconRight       = "\uF061";
+private enum iconLeft        = "\uF060";
+private enum iconEye         = "\uF06E";
+private enum iconEyeOff      = "\uF070";
+private enum iconRefresh     = "\uF021";
+private enum iconCrosshair   = "\uF05B";
+private enum iconGrid        = "\uF00A";
+private enum iconSquare      = "\uF0C8";
+private enum iconCheck       = "\uF00C";
+private enum iconPlay        = "\uF04B";
+private enum iconPause       = "\uF04C";
 
 private struct FileEntry
 {
     string name;
     string path;
     bool isDir;
+}
+
+private string fileIcon(string name)
+{
+    switch (extension(name))
+    {
+        case ".d":
+        case ".di":
+        case ".json":
+        case ".sdl":
+            return iconFileCode;
+        case ".md":
+        case ".txt":
+            return iconFileText;
+        case ".sh":
+            return iconTerminal;
+        default:
+            return iconFile;
+    }
 }
 
 void main(string[] args)
@@ -113,8 +155,7 @@ void main(string[] args)
     float deflection = 1.0f;
     Shape currentShape;
 
-    // Collapsible project tree state.
-    bool sidebarOpen = true;
+    // Project tree state.
     string currentFile;
     bool[string] folderOpen = [
         "source": true,
@@ -145,6 +186,10 @@ void main(string[] args)
             if (e.isDir)
             {
                 int open = ((key in folderOpen) !is null && folderOpen[key]) ? 1 : 0;
+                dcad_gui_text_colored(
+                    ((open != 0 ? iconFolderOpen : iconFolder) ~ " ").toStringz,
+                    0.68f, 0.68f, 0.68f, 1);
+                dcad_gui_same_line();
                 if (dcad_gui_tree_node(e.name.toStringz, &open) != 0)
                 {
                     folderOpen[key] = true;
@@ -157,6 +202,9 @@ void main(string[] args)
             else
             {
                 int selected = key == currentFile ? 1 : 0;
+                dcad_gui_text_colored((fileIcon(e.name) ~ " ").toStringz,
+                                      0.48f, 0.68f, 0.80f, 1);
+                dcad_gui_same_line();
                 if (dcad_gui_selectable(e.name.toStringz, selected) != 0)
                 {
                     try
@@ -172,6 +220,22 @@ void main(string[] args)
                 }
             }
         }
+    }
+
+    /// Compact icon button with a VS Code-style hover tooltip.
+    bool iconButton(string icon, string tip)
+    {
+        immutable pressed = dcad_gui_button(icon.toStringz) != 0;
+        dcad_gui_set_item_tooltip(tip.toStringz);
+        return pressed;
+    }
+
+    bool toggleIconButton(string icon, string tip, bool active)
+    {
+        immutable pressed = dcad_gui_button(
+            (icon ~ (active ? " " ~ iconCheck : "")).toStringz) != 0;
+        dcad_gui_set_item_tooltip(tip.toStringz);
+        return pressed;
     }
 
     // Animation state. Parts are meshed once; each frame only updates a
@@ -244,12 +308,14 @@ void main(string[] args)
         glfwPollEvents();
         dcad_gui_new_frame();
 
-        // Fixed layout rebuilt every frame: sidebar / editor / preview panes.
-        // Nothing can be dragged, resized or re-docked.
+        // Fixed layout rebuilt every frame: project tree / editor / preview /
+        // parts list. Nothing can be dragged, resized or re-docked.
         float vw, vh;
         dcad_gui_get_viewport_size(&vw, &vh);
-        immutable sidebarW = sidebarOpen ? sidebarExpandedWidth : sidebarRailWidth;
-        immutable editorW = (vw - sidebarW) * 0.44f;
+        immutable partsPaneW = hasAnimation ? partsWidth : 0f;
+        immutable editorW = (vw - sidebarWidth - partsPaneW) * 0.44f;
+        immutable viewportW = vw - sidebarWidth - editorW - partsPaneW;
+        int hoveredPart = -1;
 
         // Run trigger: global key chord, or the editor's Run button.
         bool doRun = dcad_gui_key_chord_pressed(modCtrl | keyEnter) != 0;
@@ -257,33 +323,27 @@ void main(string[] args)
         if (displayName.length > 20)
             displayName = displayName[0 .. 17] ~ "...";
 
-        // ---------------- Project sidebar ----------------
+        // ---------------- Project sidebar (always visible) ----------------
         dcad_gui_set_next_window_pos(0, 0, condAlways);
-        dcad_gui_set_next_window_size(sidebarW, vh, condAlways);
+        dcad_gui_set_next_window_size(sidebarWidth, vh, condAlways);
         if (dcad_gui_begin("Project", viewportPaneFlags))
         {
-            if (dcad_gui_button(sidebarOpen ? "<<" : ">>"))
-                sidebarOpen = !sidebarOpen;
-            if (sidebarOpen)
-            {
-                dcad_gui_separator();
-                float sx, sy, sw, sh;
-                dcad_gui_get_window_pos(&sx, &sy);
-                dcad_gui_get_window_size(&sw, &sh);
-                float cx, cy;
-                dcad_gui_get_cursor_screen_pos(&cx, &cy);
-                immutable treeH = (sy + sh - 8f) - cy;
-                if (dcad_gui_begin_child("##tree", 0,
-                                         treeH > 40 ? treeH : 40,
-                                         childFlagsBorders))
-                    drawFileTree(root, "");
-                dcad_gui_end_child();
-            }
+            float sx, sy, sw, sh;
+            dcad_gui_get_window_pos(&sx, &sy);
+            dcad_gui_get_window_size(&sw, &sh);
+            float cx, cy;
+            dcad_gui_get_cursor_screen_pos(&cx, &cy);
+            immutable treeH = (sy + sh - 8f) - cy;
+            if (dcad_gui_begin_child("##tree", 0,
+                                     treeH > 40 ? treeH : 40,
+                                     childFlagsBorders))
+                drawFileTree(root, "");
+            dcad_gui_end_child();
         }
         dcad_gui_end();
 
         // ---------------- Editor pane ----------------
-        dcad_gui_set_next_window_pos(sidebarW, 0, condAlways);
+        dcad_gui_set_next_window_pos(sidebarWidth, 0, condAlways);
         dcad_gui_set_next_window_size(editorW, vh, condAlways);
         if (dcad_gui_begin("Script", fixedPaneFlags))
         {
@@ -349,9 +409,31 @@ void main(string[] args)
         if (doRun)
             doRunScript();
 
+        // ---------------- Parts list (right pane) ----------------
+        if (hasAnimation)
+        {
+            dcad_gui_set_next_window_pos(
+                sidebarWidth + editorW + viewportW, 0, condAlways);
+            dcad_gui_set_next_window_size(partsPaneW, vh, condAlways);
+            if (dcad_gui_begin("Parts", fixedPaneFlags))
+            {
+                foreach (i; 0 .. host.animPartCount())
+                {
+                    auto name = host.animPartName(cast(int) i);
+                    if (name is null || !name.length)
+                        name = "Part " ~ (i + 1).to!string;
+                    dcad_gui_selectable((iconCube ~ " " ~ name).toStringz, 0);
+                    if (dcad_gui_is_item_hovered())
+                        hoveredPart = cast(int) i;
+                }
+            }
+            dcad_gui_end();
+        }
+        viewport.setHighlightPart(hoveredPart);
+
         // ---------------- Viewport pane ----------------
-        dcad_gui_set_next_window_pos(sidebarW + editorW, 0, condAlways);
-        dcad_gui_set_next_window_size(vw - sidebarW - editorW, vh, condAlways);
+        dcad_gui_set_next_window_pos(sidebarWidth + editorW, 0, condAlways);
+        dcad_gui_set_next_window_size(viewportW, vh, condAlways);
         if (dcad_gui_begin("3D Viewport", viewportPaneFlags))
         {
             float x, y, w, h;
@@ -359,38 +441,38 @@ void main(string[] args)
             dcad_gui_get_window_size(&w, &h);
 
             // Row 1: standard views, with Fit and a full camera reset.
-            if (dcad_gui_button("Fit")) viewport.fitAll();
+            if (iconButton(iconFit, "Fit all")) viewport.fitAll();
             dcad_gui_same_line();
-            if (dcad_gui_button("Iso")) viewport.viewIso();
+            if (iconButton(iconCube, "Isometric view")) viewport.viewIso();
             dcad_gui_same_line();
-            if (dcad_gui_button("Top")) viewport.viewTop();
+            if (iconButton(iconUp, "Top view")) viewport.viewTop();
             dcad_gui_same_line();
-            if (dcad_gui_button("Bottom")) viewport.viewBottom();
+            if (iconButton(iconDown, "Bottom view")) viewport.viewBottom();
             dcad_gui_same_line();
-            if (dcad_gui_button("Front")) viewport.viewFront();
+            if (iconButton(iconEye, "Front view")) viewport.viewFront();
             dcad_gui_same_line();
-            if (dcad_gui_button("Back")) viewport.viewBack();
+            if (iconButton(iconEyeOff, "Back view")) viewport.viewBack();
             dcad_gui_same_line();
-            if (dcad_gui_button("Right")) viewport.viewRight();
+            if (iconButton(iconRight, "Right view")) viewport.viewRight();
             dcad_gui_same_line();
-            if (dcad_gui_button("Left")) viewport.viewLeft();
+            if (iconButton(iconLeft, "Left view")) viewport.viewLeft();
             dcad_gui_same_line();
-            if (dcad_gui_button("Reset")) viewport.resetCamera();
+            if (iconButton(iconRefresh, "Reset camera")) viewport.resetCamera();
 
             // Row 2: display toggles and OCCT mesh density.
-            int flag = viewport.axesEnabled() ? 1 : 0;
-            if (dcad_gui_checkbox("Axes", &flag)) viewport.setAxes(flag != 0);
+            if (toggleIconButton(iconCrosshair, "Axes", viewport.axesEnabled()))
+                viewport.setAxes(!viewport.axesEnabled());
             dcad_gui_same_line();
-            flag = viewport.gridEnabled() ? 1 : 0;
-            if (dcad_gui_checkbox("Grid", &flag)) viewport.setGrid(flag != 0);
+            if (toggleIconButton(iconGrid, "Grid", viewport.gridEnabled()))
+                viewport.setGrid(!viewport.gridEnabled());
             dcad_gui_same_line();
-            flag = viewport.wireframeEnabled() ? 1 : 0;
-            if (dcad_gui_checkbox("Wireframe", &flag))
-                viewport.setWireframe(flag != 0);
+            if (toggleIconButton(iconCube, "Wireframe",
+                                 viewport.wireframeEnabled()))
+                viewport.setWireframe(!viewport.wireframeEnabled());
             dcad_gui_same_line();
-            flag = viewport.orthographicEnabled() ? 1 : 0;
-            if (dcad_gui_checkbox("Ortho", &flag))
-                viewport.setOrthographic(flag != 0);
+            if (toggleIconButton(iconSquare, "Orthographic projection",
+                                 viewport.orthographicEnabled()))
+                viewport.setOrthographic(!viewport.orthographicEnabled());
             dcad_gui_same_line();
             dcad_gui_set_next_item_width(110);
             if (dcad_gui_slider_float("Deflection", &deflection, 0.05f, 5.0f) != 0 &&
@@ -416,11 +498,11 @@ void main(string[] args)
             // Row 3: OpenSCAD-style animation panel for opt-in scripts.
             if (hasAnimation)
             {
-                int animate = animPlaying ? 1 : 0;
-                if (dcad_gui_checkbox("Animate", &animate))
-                    animPlaying = animate != 0;
+                if (toggleIconButton(animPlaying ? iconPause : iconPlay,
+                                     "Play/Pause animation", animPlaying))
+                    animPlaying = !animPlaying;
                 dcad_gui_same_line();
-                if (dcad_gui_button("Restart"))
+                if (iconButton(iconRefresh, "Restart animation"))
                 {
                     animTime = 0;
                     animPlaying = true;

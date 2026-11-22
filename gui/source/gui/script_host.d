@@ -33,6 +33,7 @@ import dcad.dsl.selector : FaceSelector, EdgeSelector;
 import dcad.occt.types : TopAbs_ShapeEnum;
 import dcad.occt.topology : dcad_shape_clone, dcad_shape_free;
 import core.stdc.stdlib : malloc, free;
+import core.stdc.string : memcpy;
 import std.math : abs, sqrt, PI, sin, cos, floor, ceil;
 import std.array;
 import std.algorithm;
@@ -57,6 +58,15 @@ private Shape toShape(T)(T value) {
         static assert(0, "result must be a Shape or a Workplane");
 }
 
+private string partLabel(T)(ref T part) {
+    static if (is(typeof(part.name) == string))
+        return part.name;
+    else static if (is(typeof(part.id) == string))
+        return part.id;
+    else
+        return "part";
+}
+
 /* Optional animation protocol. A script opts in by defining, inside its own
  * source (which is injected into dcad_script_run), these two locals:
  *   auto animParts = <array of NamedPart-like values with .id and .shape>;
@@ -68,6 +78,7 @@ private Shape toShape(T)(T value) {
  * clones are used for the same reason. Scripts that do not opt in pay
  * nothing. */
 private void** g_animShapePtrs;
+private char** g_animNames;
 private size_t g_animShapeCount;
 private double* g_poseData;
 private size_t g_poseFrames;
@@ -90,7 +101,10 @@ private enum string epilogue = q"EPILOGUE_END
             g_poseFrames = nf;
             g_poseParts = np;
             if (np > 0)
+            {
                 g_animShapePtrs = cast(void**) malloc(np * size_t.sizeof);
+                g_animNames = cast(char**) malloc(np * size_t.sizeof);
+            }
             if (nf > 0 && np > 0)
             {
                 g_poseData = cast(double*) malloc(nf * np * 3 * double.sizeof);
@@ -103,6 +117,17 @@ private enum string epilogue = q"EPILOGUE_END
                 auto s = toShape(p.shape);
                 if (g_animShapePtrs !is null)
                     g_animShapePtrs[i] = dcad_shape_clone(&s.native());
+                if (g_animNames !is null)
+                {
+                    auto label = partLabel(p);
+                    auto name = cast(char*) malloc(label.length + 1);
+                    if (name !is null)
+                    {
+                        memcpy(name, label.ptr, label.length);
+                        name[label.length] = 0;
+                    }
+                    g_animNames[i] = name;
+                }
                 if (g_poseData !is null)
                     foreach (fi, pose; animPoses)
                         if (auto v = p.id in pose)
@@ -137,6 +162,12 @@ extern(C) export const(void)* dcad_anim_part_shape(int i)
     return g_animShapePtrs[i];
 }
 
+extern(C) export const(char)* dcad_anim_part_name(int i)
+{
+    if (i < 0 || i >= g_animShapeCount || g_animNames is null) return null;
+    return g_animNames[i];
+}
+
 /// Linear interpolation between keyframes, written as dx/dy/dz per part.
 extern(C) export void dcad_anim_pose(double t, double* offsets)
 {
@@ -165,8 +196,15 @@ extern(C) export void dcad_anim_free()
                 dcad_shape_free(g_animShapePtrs[i]);
         free(g_animShapePtrs);
     }
+    if (g_animNames !is null)
+    {
+        foreach (i; 0 .. g_animShapeCount)
+            if (g_animNames[i] !is null) free(g_animNames[i]);
+        free(g_animNames);
+    }
     if (g_poseData !is null) free(g_poseData);
     g_animShapePtrs = null;
+    g_animNames = null;
     g_poseData = null;
     g_animShapeCount = 0;
     g_poseFrames = 0;
@@ -296,6 +334,17 @@ public:
         alias Fn = extern(C) const(void)* function(int);
         auto fn = cast(Fn) dlsym(handle, "dcad_anim_part_shape");
         return fn is null ? null : fn(i);
+    }
+
+    /// Display name for an animation part; valid until the next run().
+    string animPartName(int i)
+    {
+        if (handle is null) return null;
+        alias Fn = extern(C) const(char)* function(int);
+        auto fn = cast(Fn) dlsym(handle, "dcad_anim_part_name");
+        if (fn is null) return null;
+        auto p = fn(i);
+        return p is null ? null : fromStringz(p).idup;
     }
 
     /// 3 doubles (dx,dy,dz) per part at normalised time t.

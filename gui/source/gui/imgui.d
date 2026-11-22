@@ -77,6 +77,7 @@ extern(C) nothrow @nogc
     void dcad_gui_text_wrapped(const(char)* text);
     void dcad_gui_text_colored(const(char)* text, float r, float g, float b, float a);
     int  dcad_gui_button(const(char)* label);
+    void dcad_gui_set_item_tooltip(const(char)* text);
     void dcad_gui_same_line();
     void dcad_gui_separator();
     void dcad_gui_vertical_separator();

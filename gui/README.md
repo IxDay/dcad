@@ -1,8 +1,8 @@
 # dcad-gui
 
-Native three-pane GUI shell around the dcad kernel: a collapsible project tree
-on the left, a D script editor in the middle, and a live OpenGL preview of the
-resulting OCCT shape on the right.
+Native four-pane GUI shell around the dcad kernel: a collapsible project tree
+on the left, a D script editor in the middle, a live OpenGL preview of the
+resulting OCCT shape, and a hoverable parts list on the far right.
 
 ## Run
 
@@ -20,11 +20,12 @@ light-grey shaded geometry, and the classic RGB axis cross and ground grid.
 Edit the script, press **Cmd/Ctrl+Enter** (or click **Run**) to recompile and
 re-mesh.
 
-The left sidebar shows the repository file tree. Click a disclosure arrow to
-expand or collapse folders, and click a file to load it into the editor. Use
-`<<` to collapse the sidebar to a rail and `>>` to expand it again. The
-coffee-table sample and its animation are available under `samples` for a quick
-demo.
+The left sidebar shows the repository file tree with VS Code-style file icons.
+Click a disclosure arrow to expand or collapse folders, and click a file to load
+it into the editor. The sidebar is always visible. The coffee-table sample and
+its animation are available under `samples` for a quick demo; when an animated
+script is loaded, the far-right pane lists its parts and hovering a part
+highlights it in the preview.
 
 ## Controls
 
@@ -34,29 +35,31 @@ demo.
 | Orbit | Left-drag in the viewport |
 | Pan | Middle/Right-drag in the viewport |
 | Zoom | Scroll over the viewport |
-| Standard view | `Fit`, `Iso`, `Top`, `Bottom`, `Front`, `Back`, `Right`, `Left` |
-| Display toggles | `Axes`, `Grid`, `Wireframe`, `Ortho` checkboxes |
+| Standard view | Icon buttons: fit, iso, up, down, front/back, left/right, reset |
+| Display toggles | Icon buttons with check marks: axes, grid, wireframe, orthographic |
 | Export STEP | `STEP` button → writes `dcad-export.step` |
 | Save script | `Save` button → writes the open file, or `.dcad-gui-state` |
-| Project tree | Expand/collapse folders; click a file to open it; `<<` / `>>` collapse rail |
-| Animate | `Animate` checkbox, `Restart`, `Time`, `FPS`, `Steps` (animated scripts only) |
+| Project tree | Expand/collapse folders; click a file to open it |
+| Parts list | Hover a part on the right to highlight it in the preview |
+| Animate | Play/pause and restart icons, `Time`, `FPS`, `Steps` (animated scripts only) |
 
-The sidebar, editor, and preview panes use a fixed 220px / 44% / 56% split: they
-cannot be dragged, resized or re-docked, and none has a title header. The
-sidebar collapses to a 34px rail. The UI chrome and code editor use your VS Code
-Base16 Default Light palette; the 3D render uses the OpenSCAD-style light
-renderer. Each pane sizes its main area to the space that remains;
-the editor and sidebar keep scrollbars enabled for long content, while the
-preview pane never scrolls.
+The sidebar, editor, preview and parts panes use a fixed 220px / 44% / remaining /
+190px split: they cannot be dragged, resized or re-docked, and none has a title
+header. The parts pane appears only for animated scripts. File icons and preview
+toolbar icons come from the bundled Meslo Nerd Font. The UI chrome and code
+editor use your VS Code Base16 Default Light palette; the 3D render uses the
+OpenSCAD-style light renderer. Each pane sizes its main area to the space that
+remains; the editor and sidebar keep scrollbars enabled for long content, while
+the preview pane never scrolls.
 
 ### Preview toolbar
 
-The viewport has an OpenSCAD-in-VS-Code style toolbar. The first row frames the
-model or switches to one of the six standard views plus the default axonometric
-view. The second row toggles the axis cross, ground grid, wireframe rendering
-and orthographic projection. `Deflection` controls OCCT mesh density. The pane
-never scrolls: the animation controls sit above the canvas, and the image is
-sized to the space that remains, so everything fits vertically.
+The viewport has an OpenSCAD-in-VS-Code style icon toolbar with hover tooltips.
+The first row frames the model or switches to one of the six standard views plus
+the default axonometric view. The second row toggles the axis cross, ground grid,
+wireframe rendering and orthographic projection. `Deflection` controls OCCT mesh
+density. The pane never scrolls: the animation controls sit above the canvas,
+and the image is sized to the space that remains, so everything fits vertically.
 
 ### Animation
 

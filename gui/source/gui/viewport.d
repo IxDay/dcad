@@ -110,6 +110,7 @@ VS";
 private enum fragmentShaderSrc = q"FS
 #version 120
 varying vec3 vNormal;
+uniform float uHighlight;
 void main()
 {
     vec3 n = normalize(vNormal);
@@ -118,6 +119,11 @@ void main()
     // OpenSCAD-style neutral light grey with soft, flat shading.
     vec3 base = vec3(0.82, 0.85, 0.88);
     vec3 col = base * (0.68 + 0.32 * diff);
+    if (uHighlight > 0.5)
+    {
+        // VS Code selection blue, kept readable against the light canvas.
+        col = mix(col, vec3(0.29, 0.62, 0.80), 0.72) + 0.06 * diff;
+    }
     gl_FragColor = vec4(col, 1.0);
 }
 FS";
@@ -163,6 +169,7 @@ private:
     int projLoc;
     int viewLoc;
     int offsetLoc;
+    int highlightLoc;
     int posLoc;
     int normLoc;
     uint lineProgram;
@@ -179,6 +186,7 @@ private:
     MeshGpu mesh;
     MeshGpu[] partMeshes;
     float[3][] partOffsets;
+    int highlightPart = -1;
     bool diagnosticsDone;
     bool disposed;
 
@@ -295,6 +303,7 @@ public:
             freeGpu(p);
         partMeshes = null;
         partOffsets = null;
+        highlightPart = -1;
         mesh = MeshGpu.init;
     }
 
@@ -451,6 +460,9 @@ public:
     void setOrthographic(bool v) { orthographic = v; }
     bool orthographicEnabled() const { return orthographic; }
 
+    /// Index of the assembly part highlighted from the parts list (-1 = none).
+    void setHighlightPart(int i) { highlightPart = i; }
+
     /// Render into the FBO. `w`/`h` are in framebuffer pixels.
     void render(int w, int h)
     {
@@ -499,11 +511,16 @@ public:
             if (mesh.vertexCount > 0)
             {
                 float[3] zero = [0f, 0f, 0f];
+                glUniform1f(highlightLoc, 0f);
                 drawMesh(mesh, zero);
             }
             else
                 foreach (i, ref p; partMeshes)
+                {
+                    glUniform1f(highlightLoc,
+                                highlightPart == cast(int) i ? 1f : 0f);
                     drawMesh(p, partOffsets[i]);
+                }
             if (wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
             glDisableVertexAttribArray(posLoc);
@@ -557,6 +574,7 @@ private:
         projLoc = glGetUniformLocation(program, "uProj");
         viewLoc = glGetUniformLocation(program, "uView");
         offsetLoc = glGetUniformLocation(program, "uOffset");
+        highlightLoc = glGetUniformLocation(program, "uHighlight");
         posLoc = glGetAttribLocation(program, "aPosition");
         normLoc = glGetAttribLocation(program, "aNormal");
         stderr.writefln("viewport: program=%u proj=%d view=%d pos=%d norm=%d",
