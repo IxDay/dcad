@@ -38,42 +38,51 @@ Shape result = model.shape;
 
 private enum string stateFile = ".dcad-gui-state";
 private enum float sidebarWidth = 220f;
-private enum float partsWidth = 190f;
+private enum float partsOverlayWidth = 170f;
+private enum float iconSize = 18f;
 
-// UI icons: VS Code codicons (from the built-in `codicon.ttf`).
-private enum iconFolder      = "\uEA83"; // folder
-private enum iconFolderOpen  = "\uEAF7"; // folder-opened
-private enum iconCube        = "\uEA8B"; // symbol-object
-private enum iconFit         = "\uEBF8"; // target
-private enum iconUp          = "\uEBFF"; // arrow-circle-up
-private enum iconDown        = "\uEBFC"; // arrow-circle-down
-private enum iconFront       = "\uEA70"; // eye
-private enum iconBack        = "\uEAE7"; // eye-closed
-private enum iconRight       = "\uEBFE"; // arrow-circle-right
-private enum iconLeft        = "\uEBFD"; // arrow-circle-left
-private enum iconRefresh     = "\uEB37"; // refresh
-private enum iconCrosshair   = "\uEBD5"; // compass
-private enum iconGrid        = "\uEBB7"; // table
-private enum iconWire        = "\uEBD2"; // layers
-private enum iconSquare      = "\uEA72"; // primitive-square
-private enum iconCheck       = "\uEAB2"; // check
-private enum iconPlay        = "\uEB2C"; // run
-private enum iconPause       = "\uEAD1"; // debug-pause
-private enum iconRestart     = "\uEAD2"; // debug-restart
+// Icon textures rasterised from VS Code's own assets: the `theme-seti`
+// extension's light file icons and codicons for folders/toolbar. See
+// gui/assets/extract-vscode-icons.swift and LICENSES.md.
+private enum iconFolder      = "folder";
+private enum iconFolderOpen  = "folder-open";
+private enum iconCube        = "iso";
+private enum iconFit         = "fit";
+private enum iconUp          = "up";
+private enum iconDown        = "down";
+private enum iconFront       = "front";
+private enum iconBack        = "back";
+private enum iconRight       = "right";
+private enum iconLeft        = "left";
+private enum iconRefresh     = "refresh";
+private enum iconCrosshair   = "axes";
+private enum iconGrid        = "grid";
+private enum iconWire        = "wire";
+private enum iconSquare      = "ortho";
+private enum iconCheck       = "check";
+private enum iconPlay        = "play";
+private enum iconPause       = "pause";
+private enum iconRestart     = "restart";
 
-// Seti file icons: VS Code's built-in `theme-seti` extension.
-private struct FileIcon
+private struct FileIcon { string texture; }
+
+private enum iconFileD         = FileIcon("file-d");
+private enum iconFileJson      = FileIcon("file-json");
+private enum iconFileMarkdown  = FileIcon("file-markdown");
+private enum iconFileText      = FileIcon("file");
+private enum iconFileShell     = FileIcon("file-shell");
+private enum iconFileConfig    = FileIcon("file-config");
+
+private void*[string] iconCache;
+
+private void* iconTexture(string name)
 {
-    string glyph;
-    float r, g, b;
+    if (auto cached = name in iconCache)
+        return *cached;
+    void* tex = dcad_gui_icon(name.toStringz);
+    iconCache[name] = tex;
+    return tex;
 }
-
-private enum iconFileD       = FileIcon("\uE020", 0.722f, 0.220f, 0.239f); // _d_light
-private enum iconFileJson    = FileIcon("\uE055", 0.718f, 0.718f, 0.231f); // _json_light
-private enum iconFileMarkdown= FileIcon("\uE060", 0.286f, 0.545f, 0.655f); // _markdown_light
-private enum iconFileText    = FileIcon("\uE023", 0.749f, 0.761f, 0.757f); // _default_light
-private enum iconFileShell   = FileIcon("\uE089", 0.498f, 0.682f, 0.259f); // _shell_light
-private enum iconFileConfig  = FileIcon("\uE019", 0.384f, 0.451f, 0.475f); // _config_light
 
 private struct FileEntry
 {
@@ -200,11 +209,8 @@ void main(string[] args)
             if (e.isDir)
             {
                 int open = ((key in folderOpen) !is null && folderOpen[key]) ? 1 : 0;
-                dcad_gui_push_ui_icon_font();
-                dcad_gui_text_colored(
-                    ((open != 0 ? iconFolderOpen : iconFolder) ~ " ").toStringz,
-                    0.75f, 0.58f, 0.35f, 1);
-                dcad_gui_pop_font();
+                dcad_gui_icon_image(
+                    iconTexture(open != 0 ? iconFolderOpen : iconFolder), 16, 16);
                 dcad_gui_same_line();
                 if (dcad_gui_tree_node(e.name.toStringz, &open) != 0)
                 {
@@ -219,10 +225,7 @@ void main(string[] args)
             {
                 int selected = key == currentFile ? 1 : 0;
                 auto fi = fileIcon(e.name);
-                dcad_gui_push_file_icon_font();
-                dcad_gui_text_colored((fi.glyph ~ " ").toStringz,
-                                      fi.r, fi.g, fi.b, 1);
-                dcad_gui_pop_font();
+                dcad_gui_icon_image(iconTexture(fi.texture), 16, 16);
                 dcad_gui_same_line();
                 if (dcad_gui_selectable(e.name.toStringz, selected) != 0)
                 {
@@ -241,22 +244,20 @@ void main(string[] args)
         }
     }
 
-    /// Compact codicon button with a VS Code-style hover tooltip.
+    /// Compact VS Code icon button with a hover tooltip.
     bool iconButton(string icon, string tip)
     {
-        dcad_gui_push_ui_icon_font();
-        immutable pressed = dcad_gui_button(icon.toStringz) != 0;
-        dcad_gui_pop_font();
+        immutable pressed = dcad_gui_icon_button(
+            ("##" ~ icon).toStringz, iconTexture(icon), iconSize) != 0;
         dcad_gui_set_item_tooltip(tip.toStringz);
         return pressed;
     }
 
     bool toggleIconButton(string icon, string tip, bool active)
     {
-        dcad_gui_push_ui_icon_font();
-        immutable pressed = dcad_gui_button(
-            (icon ~ (active ? " " ~ iconCheck : "")).toStringz) != 0;
-        dcad_gui_pop_font();
+        immutable pressed = dcad_gui_toggle_icon_button(
+            ("##" ~ icon).toStringz, iconTexture(icon), iconTexture(iconCheck),
+            iconSize, active ? 1 : 0) != 0;
         dcad_gui_set_item_tooltip(tip.toStringz);
         return pressed;
     }
@@ -331,13 +332,13 @@ void main(string[] args)
         glfwPollEvents();
         dcad_gui_new_frame();
 
-        // Fixed layout rebuilt every frame: project tree / editor / preview /
-        // parts list. Nothing can be dragged, resized or re-docked.
+        // Fixed layout rebuilt every frame: project tree / editor / preview.
+        // Nothing can be dragged, resized or re-docked. The parts list is an
+        // overlay inside the preview, not a fourth pane.
         float vw, vh;
         dcad_gui_get_viewport_size(&vw, &vh);
-        immutable partsPaneW = hasAnimation ? partsWidth : 0f;
-        immutable editorW = (vw - sidebarWidth - partsPaneW) * 0.44f;
-        immutable viewportW = vw - sidebarWidth - editorW - partsPaneW;
+        immutable editorW = (vw - sidebarWidth) * 0.44f;
+        immutable viewportW = vw - sidebarWidth - editorW;
         int hoveredPart = -1;
 
         // Run trigger: global key chord, or the editor's Run button.
@@ -359,7 +360,7 @@ void main(string[] args)
             immutable treeH = (sy + sh - 8f) - cy;
             if (dcad_gui_begin_child("##tree", 0,
                                      treeH > 40 ? treeH : 40,
-                                     childFlagsBorders))
+                                     childFlagsNone))
                 drawFileTree(root, "");
             dcad_gui_end_child();
         }
@@ -431,33 +432,6 @@ void main(string[] args)
         // Run after the editor frame so text is up to date.
         if (doRun)
             doRunScript();
-
-        // ---------------- Parts list (right pane) ----------------
-        if (hasAnimation)
-        {
-            dcad_gui_set_next_window_pos(
-                sidebarWidth + editorW + viewportW, 0, condAlways);
-            dcad_gui_set_next_window_size(partsPaneW, vh, condAlways);
-            if (dcad_gui_begin("Parts", fixedPaneFlags))
-            {
-                foreach (i; 0 .. host.animPartCount())
-                {
-                    auto name = host.animPartName(cast(int) i);
-                    if (name is null || !name.length)
-                        name = "Part " ~ (i + 1).to!string;
-                    dcad_gui_push_ui_icon_font();
-                    dcad_gui_text_colored((iconCube ~ " ").toStringz,
-                                          0.48f, 0.68f, 0.80f, 1);
-                    dcad_gui_pop_font();
-                    dcad_gui_same_line();
-                    dcad_gui_selectable(name.toStringz, 0);
-                    if (dcad_gui_is_item_hovered())
-                        hoveredPart = cast(int) i;
-                }
-            }
-            dcad_gui_end();
-        }
-        viewport.setHighlightPart(hoveredPart);
 
         // ---------------- Viewport pane ----------------
         dcad_gui_set_next_window_pos(sidebarWidth + editorW, 0, condAlways);
@@ -599,6 +573,38 @@ void main(string[] args)
             immutable ph = cast(int)(imgH * 2);
             viewport.render(pw, ph);
             dcad_gui_image(viewport.textureID(), imgW, imgH);
+
+            // Parts list: a transparent overlay on the render, with no pane,
+            // border or background. Hovering a row highlights that part.
+            if (hasAnimation)
+            {
+                immutable rowH = 19f;
+                immutable startX = cursorX + imgW - partsOverlayWidth - 6f;
+                immutable startY = cursorY + 6f;
+                foreach (i; 0 .. host.animPartCount())
+                {
+                    auto name = host.animPartName(cast(int) i);
+                    if (name is null || !name.length)
+                        name = "Part " ~ (i + 1).to!string;
+                    immutable rowY = startY + cast(float) i * rowH;
+
+                    dcad_gui_set_cursor_screen_pos(startX, rowY);
+                    dcad_gui_icon_image(iconTexture(iconCube), 14, 14);
+                    dcad_gui_set_cursor_screen_pos(startX + 18f, rowY);
+                    dcad_gui_text(name.toStringz);
+
+                    dcad_gui_set_cursor_screen_pos(startX - 3f, rowY - 2f);
+                    dcad_gui_invisible_button(("##part" ~ i.to!string).toStringz,
+                                              partsOverlayWidth, rowH);
+                    if (dcad_gui_is_item_hovered())
+                    {
+                        hoveredPart = cast(int) i;
+                        dcad_gui_set_item_tooltip(
+                            ("Highlight " ~ name).toStringz);
+                    }
+                }
+            }
+            viewport.setHighlightPart(hoveredPart);
         }
         dcad_gui_end();
 

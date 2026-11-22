@@ -12,7 +12,17 @@
 #include <cstdio>
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <algorithm>
+
+#ifdef __APPLE__
+#define GL_SILENCE_DEPRECATION
+#include <OpenGL/gl.h>
+#else
+#include <GL/gl.h>
+#endif
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
 
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -26,9 +36,6 @@ struct GLFWwindow;
  * ImGui lifecycle
  * -------------------------------------------------------------------------- */
 
-static ImFont* g_uiIconFont = nullptr;   // VS Code codicons
-static ImFont* g_fileIconFont = nullptr; // VS Code Seti file icons
-
 static ImFont* addFontFromAsset(ImGuiIO& io, const char* path, float size,
                                 const ImWchar* ranges)
 {
@@ -40,10 +47,8 @@ static ImFont* addFontFromAsset(ImGuiIO& io, const char* path, float size,
 
 static void loadGuiFont(ImGuiIO& io)
 {
-    // Text uses the monospace UI font; icons come from VS Code's own fonts.
-    static ImWchar textRange[]  = {0x0020, 0x00FF, 0};
-    static ImWchar codiconRange[] = {0xEA60, 0xECFF, 0};
-    static ImWchar setiRange[]  = {0xE000, 0xE0FF, 0};
+    // Text uses the monospace UI font; icons are PNG textures.
+    static ImWchar textRange[] = {0x0020, 0x00FF, 0};
 
     char homeFont[1024] = {0};
     if (const char* home = std::getenv("HOME"))
@@ -65,11 +70,63 @@ static void loadGuiFont(ImGuiIO& io)
         }
     }
     if (!haveTextFont) io.Fonts->AddFontDefault();
+}
 
-    g_uiIconFont = addFontFromAsset(io, "gui/assets/codicon.ttf",
-                                    16.0f, codiconRange);
-    g_fileIconFont = addFontFromAsset(io, "gui/assets/Seti.ttf",
-                                      19.0f, setiRange);
+/* --------------------------------------------------------------------------
+ * Icon textures. These PNGs are rasterised from VS Code's own assets (the
+ * theme-seti light file icons and codicons) by
+ * gui/assets/extract-vscode-icons.swift. Keeping them as textures instead of
+ * private-use font glyphs means the sidebar and toolbar look exactly like
+ * VS Code, without depending on any locally installed font.
+ * -------------------------------------------------------------------------- */
+
+static std::unordered_map<std::string, ImTextureID> g_iconTextures;
+
+extern "C" void* dcad_gui_icon(const char* name)
+{
+    if (!name || !*name) return nullptr;
+
+    auto found = g_iconTextures.find(name);
+    if (found != g_iconTextures.end())
+        return reinterpret_cast<void*>(found->second);
+
+    char path[512];
+    std::snprintf(path, sizeof(path), "gui/assets/icons/%s.png", name);
+
+    int width = 0, height = 0, channels = 0;
+    unsigned char* pixels = stbi_load(path, &width, &height, &channels, 4);
+    if (!pixels)
+    {
+        std::fprintf(stderr, "gui icon not found: %s\n", path);
+        g_iconTextures[name] = 0;
+        return nullptr;
+    }
+
+    GLuint texture = 0;
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    stbi_image_free(pixels);
+
+    ImTextureID id = static_cast<ImTextureID>(texture);
+    g_iconTextures[name] = id;
+    return reinterpret_cast<void*>(id);
+}
+
+static void releaseIcons()
+{
+    for (const auto& entry : g_iconTextures)
+    {
+        GLuint texture = static_cast<GLuint>(entry.second);
+        if (texture) glDeleteTextures(1, &texture);
+    }
+    g_iconTextures.clear();
 }
 
 extern "C" void dcad_gui_init(void* window, const char* glslVersion)
@@ -268,6 +325,7 @@ extern "C" void dcad_gui_apply_zed_theme(void)
 
 extern "C" void dcad_gui_shutdown(void)
 {
+    releaseIcons();
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -295,19 +353,6 @@ extern "C" void dcad_gui_dockspace(void)
 /* --------------------------------------------------------------------------
  * Windows and widgets
  * -------------------------------------------------------------------------- */
-
-extern "C" void dcad_gui_push_ui_icon_font(void)
-{
-    // Always push something so the matching PopFont() stays balanced.
-    ImGui::PushFont(g_uiIconFont ? g_uiIconFont : ImGui::GetFont());
-}
-
-extern "C" void dcad_gui_push_file_icon_font(void)
-{
-    ImGui::PushFont(g_fileIconFont ? g_fileIconFont : ImGui::GetFont());
-}
-
-extern "C" void dcad_gui_pop_font(void) { ImGui::PopFont(); }
 
 extern "C" int dcad_gui_begin(const char* name, int flags)
 {
@@ -385,6 +430,54 @@ extern "C" void dcad_gui_image(void* texID, float w, float h)
     // Flip V so the model is not displayed upside down.
     ImGui::Image(ImTextureRef(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(texID))),
                  ImVec2(w, h), ImVec2(0, 1), ImVec2(1, 0));
+}
+
+static ImTextureID iconTexture(void* texID)
+{
+    return static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(texID));
+}
+
+extern "C" void dcad_gui_icon_image(void* texID, float w, float h)
+{
+    if (!texID) return;
+    ImGui::Image(ImTextureRef(iconTexture(texID)), ImVec2(w, h));
+}
+
+extern "C" int dcad_gui_icon_button(const char* id, void* texID, float size)
+{
+    if (!texID) return dcad_gui_button(id);
+
+    // VS Code toolbar buttons have no background at rest, only on hover.
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, broc(0xd8d8d8));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, broc(0x7cafc2, 0.45f));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+    bool pressed = ImGui::ImageButton(id, ImTextureRef(iconTexture(texID)),
+                                      ImVec2(size, size));
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(3);
+    return pressed ? 1 : 0;
+}
+
+extern "C" int dcad_gui_toggle_icon_button(const char* id, void* texID,
+                                            void* checkTex, float size, int active)
+{
+    bool pressed = dcad_gui_icon_button(id, texID, size) != 0;
+    if (active && checkTex)
+    {
+        ImVec2 hi = ImGui::GetItemRectMax();
+        float s = size * 0.42f;
+        ImGui::GetWindowDrawList()->AddImage(
+            ImTextureRef(iconTexture(checkTex)),
+            ImVec2(hi.x - s - 1.0f, hi.y - s - 1.0f),
+            ImVec2(hi.x - 1.0f, hi.y - 1.0f));
+    }
+    return pressed ? 1 : 0;
+}
+
+extern "C" void dcad_gui_set_cursor_screen_pos(float x, float y)
+{
+    ImGui::SetCursorScreenPos(ImVec2(x, y));
 }
 
 extern "C" int dcad_gui_invisible_button(const char* id, float w, float h)

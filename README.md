@@ -67,10 +67,11 @@ Selectors are enums: `.faces(">Z")` from CadQuery becomes
 
 ## GUI
 
-[`gui/`](gui/) is a native four-pane IDE-style shell with a project tree, D
-script editor, live 3D preview, and a hoverable parts list, built on GLFW, the ImGui docking
-branch, raw OpenGL and `ImGuiColorTextEdit`. The UI uses your VS Code Base16
-Default Light palette and the preview an OpenSCAD-style renderer. The workspace
+[`gui/`](gui/) is a native three-pane IDE-style shell with a project tree, D
+script editor, and a live 3D preview whose parts list is a transparent overlay,
+built on GLFW, the ImGui docking branch, raw OpenGL and `ImGuiColorTextEdit`.
+Icons are extracted from VS Code's own Seti and codicon assets, and the UI uses
+your VS Code Base16 Default Light palette with an OpenSCAD-style renderer. The workspace
 recommends `webfreak.code-d` for D LSP support in VS Code. Scripts are D source
 compiled to a hot-loaded shared library on each Run. See
 [`gui/README.md`](gui/README.md) for controls and the execution-model tradeoff.

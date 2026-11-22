@@ -1,17 +1,22 @@
-# Bundled font licenses
+# Bundled font and icon licenses
 
-The GUI bundles three fonts in this directory:
+The GUI bundles these fonts here and rasterised icons in `icons/`:
 
 | File | Used for | Source | License |
 | --- | --- | --- | --- |
-| `codicon.ttf` | Preview toolbar / UI icons | Visual Studio Code `out/media/codicon.ttf` | MIT (Microsoft) |
-| `Seti.ttf` | File-type icons in the project tree | Converted from VS Code's `theme-seti/icons/seti.woff` | MIT (Jesse Weed) |
+| `codicon.ttf` | Source for folder / toolbar icon PNGs | Visual Studio Code `out/media/codicon.ttf` | MIT (Microsoft) |
+| `Seti.ttf` | Source for file-type icon PNGs | Converted from VS Code's `theme-seti/icons/seti.woff` | MIT (Jesse Weed) |
 | `MesloLGS_NF_Regular.ttf` | Monospace UI / editor text | Meslo LG S Nerd Font | SIL OFL 1.1 |
+
+`icons/*.png` are rasterised from VS Code's own assets by
+`extract-vscode-icons.swift`: file icons use the exact glyphs and colours of the
+`_light` variants from VS Code's built-in Seti icon theme, while folders and the
+preview toolbar use codicons. They are uploaded as OpenGL textures at runtime;
+no icon font is loaded by the application.
 
 `Seti.ttf` is a lossless WOFF1-to-SFNT conversion of the `seti.woff` shipped
 with VS Code's built-in Seti icon theme; glyph outlines and code points are
-unchanged. The original icon theme uses the same light-variant colours that
-`gui/source/gui/app.d` applies.
+unchanged. It is kept here as the input to the extraction script.
 
 ---
 

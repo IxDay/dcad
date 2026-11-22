@@ -1,8 +1,9 @@
 # dcad-gui
 
-Native four-pane GUI shell around the dcad kernel: a collapsible project tree
-on the left, a D script editor in the middle, a live OpenGL preview of the
-resulting OCCT shape, and a hoverable parts list on the far right.
+Native three-pane GUI shell around the dcad kernel: a collapsible project tree
+on the left, a D script editor in the middle, and a live OpenGL preview of the
+resulting OCCT shape. For animated scripts the parts list is a borderless,
+transparent overlay on the preview.
 
 ## Run
 
@@ -20,12 +21,13 @@ light-grey shaded geometry, and the classic RGB axis cross and ground grid.
 Edit the script, press **Cmd/Ctrl+Enter** (or click **Run**) to recompile and
 re-mesh.
 
-The left sidebar shows the repository file tree with the same file icons VS Code
-uses (its built-in Seti icon theme). Click a disclosure arrow to expand or
-collapse folders, and click a file to load it into the editor. The sidebar is
-always visible. The coffee-table sample and its animation are available under
-`samples` for a quick demo; when an animated script is loaded, the far-right
-pane lists its parts and hovering a part highlights it in the preview.
+The left sidebar shows the repository file tree with the exact file icons VS Code
+uses (its built-in Seti icon theme, extracted to PNGs). Click a disclosure arrow
+to expand or collapse folders, and click a file to load it into the editor. The
+sidebar is always visible. The coffee-table sample and its animation are
+available under `samples` for a quick demo; when an animated script is loaded,
+its parts are listed as a transparent overlay in the top-right of the preview and
+hovering a part highlights it in the render.
 
 ## Controls
 
@@ -40,23 +42,25 @@ pane lists its parts and hovering a part highlights it in the preview.
 | Export STEP | `STEP` button → writes `dcad-export.step` |
 | Save script | `Save` button → writes the open file, or `.dcad-gui-state` |
 | Project tree | Expand/collapse folders; click a file to open it |
-| Parts list | Hover a part on the right to highlight it in the preview |
+| Parts list | Hover a part in the preview's top-right overlay to highlight it |
 | Animate | Play/pause and restart icons, `Time`, `FPS`, `Steps` (animated scripts only) |
 
-The sidebar, editor, preview and parts panes use a fixed 220px / 44% / remaining /
-190px split: they cannot be dragged, resized or re-docked, and none has a title
-header. The parts pane appears only for animated scripts. File icons come from
-VS Code's Seti icon theme (`gui/assets/Seti.ttf`) and UI icons from its codicon
-font (`gui/assets/codicon.ttf`); see `gui/assets/LICENSES.md`. The UI chrome and
-code editor use your VS Code Base16 Default Light palette; the 3D render uses
-the OpenSCAD-style light renderer. Each pane sizes its main area to the space
-that remains; the editor and sidebar keep scrollbars enabled for long content,
-while the preview pane never scrolls.
+The sidebar, editor and preview use a fixed 220px / 44% / remaining split: they
+cannot be dragged, resized or re-docked, and none has a title header. The parts
+overlay appears only for animated scripts and has no pane, border or background.
+File icons are rasterised from the light variants in VS Code's `theme-seti`
+extension and UI icons from its codicon font, giving PNGs in
+`gui/assets/icons/`. Regenerate them with
+`swift gui/assets/extract-vscode-icons.swift`; licences are in
+`gui/assets/LICENSES.md`. The UI chrome and code editor use your VS Code Base16
+Default Light palette; the 3D render uses the OpenSCAD-style light renderer.
+Each pane sizes its main area to the space that remains; the editor and sidebar
+keep scrollbars enabled for long content, while the preview pane never scrolls.
 
 ### Preview toolbar
 
 The viewport has an OpenSCAD-in-VS-Code style toolbar built from VS Code's own
-codicon font, with hover tooltips.
+codicon icons (rasterised to PNG), with hover tooltips.
 The first row frames the model or switches to one of the six standard views plus
 the default axonometric view. The second row toggles the axis cross, ground grid,
 wireframe rendering and orthographic projection. `Deflection` controls OCCT mesh

@@ -62,10 +62,12 @@ extern(C) nothrow @nogc
     void dcad_gui_render();
     void dcad_gui_dockspace();
 
-    // Icon fonts extracted from VS Code (codicons + Seti file icons).
-    void dcad_gui_push_ui_icon_font();
-    void dcad_gui_push_file_icon_font();
-    void dcad_gui_pop_font();
+    // Icons rasterised from VS Code's own extension assets to PNG textures.
+    void* dcad_gui_icon(const(char)* name);
+    void  dcad_gui_icon_image(void* texID, float w, float h);
+    int   dcad_gui_icon_button(const(char)* id, void* texID, float size);
+    int   dcad_gui_toggle_icon_button(const(char)* id, void* texID,
+                                      void* checkTex, float size, int active);
 
     // windows / widgets
     int  dcad_gui_begin(const(char)* name, int flags);
@@ -75,6 +77,7 @@ extern(C) nothrow @nogc
     void dcad_gui_get_window_pos(float* x, float* y);
     void dcad_gui_get_window_size(float* w, float* h);
     void dcad_gui_get_cursor_screen_pos(float* x, float* y);
+    void dcad_gui_set_cursor_screen_pos(float x, float y);
     void dcad_gui_get_viewport_size(float* w, float* h);
     int  dcad_gui_is_window_hovered();
     int  dcad_gui_is_window_focused();
