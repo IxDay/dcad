@@ -7,6 +7,7 @@ module gui.imgui;
 
 // --- ImGui flags / enums ---------------------------------------------------
 enum int windowFlagsNone = 0;
+enum int windowFlagsNoTitleBar = 1 << 0;
 enum int windowFlagsNoResize = 1 << 1;
 enum int windowFlagsNoMove = 1 << 2;
 enum int windowFlagsNoSavedSettings = 1 << 8;
@@ -16,8 +17,9 @@ enum int windowFlagsNoScrollbar = 1 << 3;
 enum int windowFlagsNoScrollWithMouse = 1 << 4;
 
 /// Both panes are locked into a fixed left/right split.
-enum int fixedPaneFlags = windowFlagsNoMove | windowFlagsNoResize |
-                          windowFlagsNoDocking | windowFlagsNoSavedSettings;
+enum int fixedPaneFlags = windowFlagsNoTitleBar | windowFlagsNoMove |
+                          windowFlagsNoResize | windowFlagsNoDocking |
+                          windowFlagsNoSavedSettings;
 
 /// The preview never scrolls: every control and the image fit vertically.
 enum int viewportPaneFlags = fixedPaneFlags | windowFlagsNoScrollbar |

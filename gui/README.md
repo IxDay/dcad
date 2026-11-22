@@ -30,7 +30,10 @@ script, press **Cmd/Ctrl+Enter** (or click **Run**) to recompile and re-mesh.
 | Animate | `Animate` checkbox, `Restart`, `Time`, `FPS`, `Steps` (animated scripts only) |
 
 The two panes use a fixed 44% / 56% split: they cannot be dragged, resized or
-re-docked. Both the UI chrome and the 3D render use the light brocanth palette.
+re-docked, and neither has a title header. Both the UI chrome and the 3D render
+use the light brocanth palette. Each pane sizes its main area to the space that
+remains; the editor pane keeps scrollbars enabled for long scripts or errors,
+while the preview pane never scrolls.
 
 ### Preview toolbar
 

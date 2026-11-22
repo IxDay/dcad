@@ -214,11 +214,17 @@ void main(string[] args)
 
             dcad_gui_separator();
 
-            // Editor fills the remaining space.
+            // Editor takes whatever is left after the controls below it, so
+            // the pane fits normally. Scrolling is still enabled on this pane
+            // and on the error child, for genuinely long content.
             float wx, wy, ww, wh;
             dcad_gui_get_window_pos(&wx, &wy);
             dcad_gui_get_window_size(&ww, &wh);
-            immutable editorH = wh - 150 > 100 ? wh - 150 : 100;
+            float cursorX, cursorY;
+            dcad_gui_get_cursor_screen_pos(&cursorX, &cursorY);
+            immutable bottomReserve = showError ? 168f : 64f;
+            immutable available = (wy + wh - 8f) - cursorY - bottomReserve;
+            immutable editorH = available > 80 ? available : 80;
             dcad_textedit_render(editor, "##script", ww - 24, editorH);
 
             if (dcad_gui_button("Save script"))
@@ -233,7 +239,12 @@ void main(string[] args)
             if (showError && lastError.length)
             {
                 dcad_gui_text_colored("ERROR:".toStringz, 0.75f, 0.15f, 0.15f, 1);
-                if (dcad_gui_begin_child("##error", 0, 90, 1))
+                float errX, errY;
+                dcad_gui_get_cursor_screen_pos(&errX, &errY);
+                immutable errRoom = (wy + wh - 8f) - errY;
+                if (dcad_gui_begin_child("##error", 0,
+                                         errRoom > 60 ? errRoom : 60,
+                                         childFlagsBorders))
                     dcad_gui_text_wrapped(lastError.toStringz);
                 dcad_gui_end_child();
             }
