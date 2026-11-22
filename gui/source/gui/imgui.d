@@ -79,6 +79,7 @@ extern(C) nothrow @nogc
     int  dcad_gui_button(const(char)* label);
     void dcad_gui_same_line();
     void dcad_gui_separator();
+    void dcad_gui_vertical_separator();
     void dcad_gui_spacing();
     void dcad_gui_image(void* texID, float w, float h);
     int  dcad_gui_invisible_button(const(char)* id, float w, float h);

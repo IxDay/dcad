@@ -81,12 +81,12 @@ void main(string[] args)
     // --- ImGui ------------------------------------------------------------
     dcad_gui_init(cast(void*) window, "#version 120");
     scope(exit) dcad_gui_shutdown();
-    dcad_gui_apply_zed_theme(); // dark, minimal Zed-like chrome
+    dcad_gui_apply_light_theme(); // Visual Studio Code Light+
 
     // --- Application state ------------------------------------------------
     auto editor = dcad_textedit_new();
     scope(exit) dcad_textedit_free(editor);
-    dcad_textedit_set_zed_palette(editor);
+    dcad_textedit_set_light_palette(editor);
 
     immutable workDir = buildPath(".dcad-gui-scripts");
     mkdirRecurse(workDir);
@@ -244,27 +244,29 @@ void main(string[] args)
         glfwPollEvents();
         dcad_gui_new_frame();
 
-        // Fixed two-pane split: 44% editor / 56% viewport, rebuilt every
-        // frame so neither pane can be dragged, resized or re-docked.
+        // Fixed layout rebuilt every frame: sidebar / editor / preview panes.
+        // Nothing can be dragged, resized or re-docked.
         float vw, vh;
         dcad_gui_get_viewport_size(&vw, &vh);
         immutable sidebarW = sidebarOpen ? sidebarExpandedWidth : sidebarRailWidth;
         immutable editorW = (vw - sidebarW) * 0.44f;
 
+        // Run trigger: global key chord, or the editor's Run button.
+        bool doRun = dcad_gui_key_chord_pressed(modCtrl | keyEnter) != 0;
+        auto displayName = currentFile.length ? baseName(currentFile) : "untitled";
+        if (displayName.length > 20)
+            displayName = displayName[0 .. 17] ~ "...";
+
         // ---------------- Project sidebar ----------------
         dcad_gui_set_next_window_pos(0, 0, condAlways);
         dcad_gui_set_next_window_size(sidebarW, vh, condAlways);
-        if (dcad_gui_begin("Project", fixedPaneFlags))
+        if (dcad_gui_begin("Project", viewportPaneFlags))
         {
+            if (dcad_gui_button(sidebarOpen ? "<<" : ">>"))
+                sidebarOpen = !sidebarOpen;
             if (sidebarOpen)
             {
-                dcad_gui_text_colored("PROJECT".toStringz,
-                                      0.55f, 0.61f, 0.68f, 1);
-                dcad_gui_same_line();
-                if (dcad_gui_button("<<"))
-                    sidebarOpen = false;
                 dcad_gui_separator();
-
                 float sx, sy, sw, sh;
                 dcad_gui_get_window_pos(&sx, &sy);
                 dcad_gui_get_window_size(&sw, &sh);
@@ -277,38 +279,28 @@ void main(string[] args)
                     drawFileTree(root, "");
                 dcad_gui_end_child();
             }
-            else if (dcad_gui_button(">>"))
-                sidebarOpen = true;
         }
         dcad_gui_end();
-
-        // Run trigger: key chord checked globally, button in editor window.
-        bool doRun = dcad_gui_key_chord_pressed(modCtrl | keyEnter) != 0;
 
         // ---------------- Editor pane ----------------
         dcad_gui_set_next_window_pos(sidebarW, 0, condAlways);
         dcad_gui_set_next_window_size(editorW, vh, condAlways);
-        if (dcad_gui_begin("Script", fixedPaneFlags | windowFlagsMenuBar))
+        if (dcad_gui_begin("Script", fixedPaneFlags))
         {
-            if (dcad_gui_begin_menu_bar())
-            {
-                if (dcad_gui_begin_menu("File"))
-                {
-                    if (dcad_gui_menu_item("Reset to example", null, 0, 1))
-                        dcad_textedit_set_text(editor, defaultScript.toStringz);
-                    dcad_gui_end_menu();
-                }
-                dcad_gui_end_menu_bar();
-            }
-
-            if (dcad_gui_button("Run (Ctrl/Cmd+Enter)") || doRun)
+            // Action row at the top of this pane; no menu-bar header.
+            if (dcad_gui_button("Run") || doRun)
                 doRun = true;
-
             dcad_gui_same_line();
-            if (dcad_gui_button("Reset camera"))
-                viewport.resetCamera();
+            if (dcad_gui_button("Save"))
+            {
+                import std.string : fromStringz;
+                immutable target = currentFile.length
+                    ? buildPath(root, currentFile) : stateFile;
+                write(target, fromStringz(dcad_textedit_get_text(editor)).idup);
+                status = "Saved " ~ target;
+            }
             dcad_gui_same_line();
-            if (dcad_gui_button("Export STEP") && currentShape !is null)
+            if (dcad_gui_button("STEP") && currentShape !is null)
             {
                 if (dcad_guarded_step_write(&currentShape.native(),
                                             "dcad-export.step".toStringz) == 0)
@@ -316,15 +308,16 @@ void main(string[] args)
                 else
                     status = "STEP export failed";
             }
-
-            dcad_gui_text_colored(
-                (currentFile.length ? currentFile : "untitled").toStringz,
-                0.55f, 0.61f, 0.68f, 1);
+            dcad_gui_same_line();
+            if (dcad_gui_button("Example"))
+                dcad_textedit_set_text(editor, defaultScript.toStringz);
+            dcad_gui_same_line();
+            dcad_gui_text_colored(displayName.toStringz,
+                                  0.42f, 0.42f, 0.42f, 1);
             dcad_gui_separator();
 
-            // Editor takes whatever is left after the controls below it, so
-            // the pane fits normally. Scrolling is still enabled on this pane
-            // and on the error child, for genuinely long content.
+            // Editor takes whatever is left after the status / error strip, so
+            // the pane fits vertically. Scrolling stays enabled for long files.
             float wx, wy, ww, wh;
             dcad_gui_get_window_pos(&wx, &wy);
             dcad_gui_get_window_size(&ww, &wh);
@@ -335,20 +328,11 @@ void main(string[] args)
             immutable editorH = available > 80 ? available : 80;
             dcad_textedit_render(editor, "##script", ww - 24, editorH);
 
-            if (dcad_gui_button("Save"))
-            {
-                import std.string : fromStringz;
-                immutable target = currentFile.length
-                    ? buildPath(root, currentFile) : stateFile;
-                write(target, fromStringz(dcad_textedit_get_text(editor)).idup);
-                status = "Saved " ~ target;
-            }
-
-            dcad_gui_text_colored(status.toStringz, 0.49f, 0.91f, 0.58f, 1);
+            dcad_gui_text_colored(status.toStringz, 0.10f, 0.50f, 0.20f, 1);
 
             if (showError && lastError.length)
             {
-                dcad_gui_text_colored("ERROR:".toStringz, 1f, 0.42f, 0.42f, 1);
+                dcad_gui_text_colored("ERROR:".toStringz, 0.82f, 0.10f, 0.10f, 1);
                 float errX, errY;
                 dcad_gui_get_cursor_screen_pos(&errX, &errY);
                 immutable errRoom = (wy + wh - 8f) - errY;
@@ -374,7 +358,7 @@ void main(string[] args)
             dcad_gui_get_window_pos(&x, &y);
             dcad_gui_get_window_size(&w, &h);
 
-            // --- OpenSCAD-style view toolbar -------------------------------
+            // Row 1: standard views, with Fit and a full camera reset.
             if (dcad_gui_button("Fit")) viewport.fitAll();
             dcad_gui_same_line();
             if (dcad_gui_button("Iso")) viewport.viewIso();
@@ -390,7 +374,10 @@ void main(string[] args)
             if (dcad_gui_button("Right")) viewport.viewRight();
             dcad_gui_same_line();
             if (dcad_gui_button("Left")) viewport.viewLeft();
+            dcad_gui_same_line();
+            if (dcad_gui_button("Reset")) viewport.resetCamera();
 
+            // Row 2: display toggles and OCCT mesh density.
             int flag = viewport.axesEnabled() ? 1 : 0;
             if (dcad_gui_checkbox("Axes", &flag)) viewport.setAxes(flag != 0);
             dcad_gui_same_line();
@@ -404,9 +391,8 @@ void main(string[] args)
             flag = viewport.orthographicEnabled() ? 1 : 0;
             if (dcad_gui_checkbox("Ortho", &flag))
                 viewport.setOrthographic(flag != 0);
-
             dcad_gui_same_line();
-            dcad_gui_set_next_item_width(150);
+            dcad_gui_set_next_item_width(110);
             if (dcad_gui_slider_float("Deflection", &deflection, 0.05f, 5.0f) != 0 &&
                 currentShape !is null)
             {
@@ -426,11 +412,8 @@ void main(string[] args)
                         cast(const(void)*)&currentShape.native(), deflection);
                 status = "Remeshed - " ~ tris.to!string ~ " triangles";
             }
-            dcad_gui_separator();
 
-            // --- OpenSCAD-style animation panel -----------------------------
-            // Placed above the canvas so the image can absorb all remaining
-            // vertical space; no child window, so there is no scrollbar.
+            // Row 3: OpenSCAD-style animation panel for opt-in scripts.
             if (hasAnimation)
             {
                 int animate = animPlaying ? 1 : 0;
@@ -443,25 +426,25 @@ void main(string[] args)
                     animPlaying = true;
                 }
                 dcad_gui_same_line();
-                immutable tNorm = animTime / cycleSeconds();
-                dcad_gui_text(("  $t = " ~ format("%.2f", tNorm)).toStringz);
-
+                dcad_gui_text(("  $t = " ~ format("%.2f",
+                    animTime / cycleSeconds())).toStringz);
+                dcad_gui_same_line();
+                dcad_gui_set_next_item_width(100);
                 float timeF = cast(float) animTime;
-                dcad_gui_set_next_item_width(240);
                 if (dcad_gui_slider_float("Time", &timeF, 0,
                                           cast(float) cycleSeconds()) != 0)
                     animTime = timeF;
-
-                dcad_gui_set_next_item_width(90);
+                dcad_gui_same_line();
+                dcad_gui_set_next_item_width(50);
                 if (dcad_gui_input_float("FPS", &animFps, 1) != 0 && animFps < 1)
                     animFps = 1;
                 dcad_gui_same_line();
-                dcad_gui_set_next_item_width(90);
+                dcad_gui_set_next_item_width(55);
                 if (dcad_gui_input_int("Steps", &animSteps, 1) != 0 &&
                     animSteps < 1)
                     animSteps = 1;
-                dcad_gui_separator();
             }
+            dcad_gui_separator();
 
             // The canvas takes exactly the space left in the pane.
             float cursorX, cursorY;

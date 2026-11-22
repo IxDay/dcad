@@ -38,9 +38,9 @@ extern "C" void dcad_gui_init(void* window, const char* glslVersion)
 }
 
 /* --------------------------------------------------------------------------
- * Brocanth-ui "original" theme, light variant, translated to ImGui.
- * Purple brand #625afa / #9d97ff, cool greys #f6f8fa -> #1a1b25, body text
- * #414552, 4/6/8/10px radii, 32px controls, two-layer shadow.
+ * Visual Studio Code "Light+" theme, translated to ImGui.
+ * White editor background, #f3f3f3 sidebar/chrome, #333333 text, #007acc
+ * blue accents, square-ish controls and thin #d4d4d4 borders.
  * -------------------------------------------------------------------------- */
 
 static ImVec4 broc(unsigned int rgb, float a = 1.0f)
@@ -55,82 +55,81 @@ extern "C" void dcad_gui_apply_light_theme(void)
     ImGui::StyleColorsLight();
     ImGuiStyle& s = ImGui::GetStyle();
 
-    // Tight radii: 4 (small) / 6 (controls) / 8 (children) / 10 (windows).
-    s.WindowRounding = 10.0f;
-    s.ChildRounding = 8.0f;
-    s.PopupRounding = 8.0f;
-    s.FrameRounding = 6.0f;
-    s.ScrollbarRounding = 6.0f;
-    s.GrabRounding = 6.0f;
-    s.TabRounding = 6.0f;
+    // VS Code uses almost square corners and thin borders.
+    s.WindowRounding = 2.0f;
+    s.ChildRounding = 2.0f;
+    s.PopupRounding = 4.0f;
+    s.FrameRounding = 2.0f;
+    s.ScrollbarRounding = 2.0f;
+    s.GrabRounding = 2.0f;
+    s.TabRounding = 2.0f;
 
-    // 32px controls with compact 4/6/8/10 spacing grid.
-    s.WindowPadding = ImVec2(10, 10);
-    s.FramePadding = ImVec2(10, 9);
-    s.ItemSpacing = ImVec2(8, 6);
+    s.WindowPadding = ImVec2(10, 8);
+    s.FramePadding = ImVec2(8, 4);
+    s.ItemSpacing = ImVec2(6, 4);
     s.ItemInnerSpacing = ImVec2(6, 4);
     s.IndentSpacing = 16.0f;
     s.ScrollbarSize = 12.0f;
-    s.GrabMinSize = 12.0f;
+    s.GrabMinSize = 10.0f;
     s.WindowBorderSize = 1.0f;
     s.FrameBorderSize = 1.0f;
     s.PopupBorderSize = 1.0f;
 
     ImVec4* c = s.Colors;
-    c[ImGuiCol_Text]                   = broc(0x414552);
-    c[ImGuiCol_TextDisabled]           = broc(0x8b8f9a);
+    c[ImGuiCol_Text]                   = broc(0x333333);
+    c[ImGuiCol_TextDisabled]           = broc(0x999999);
     c[ImGuiCol_WindowBg]               = broc(0xffffff);
-    c[ImGuiCol_ChildBg]                = broc(0xf6f8fa);
+    c[ImGuiCol_ChildBg]                = broc(0xf3f3f3);
     c[ImGuiCol_PopupBg]                = broc(0xffffff);
-    c[ImGuiCol_Border]                 = broc(0xd5dbe1);
-    c[ImGuiCol_BorderShadow]           = broc(0x1a1b25, 0.05f);
-    c[ImGuiCol_FrameBg]                = broc(0xf6f8fa);
-    c[ImGuiCol_FrameBgHovered]         = broc(0xedeaff);
-    c[ImGuiCol_FrameBgActive]          = broc(0xe0dbff);
-    c[ImGuiCol_TitleBg]                = broc(0xf6f8fa);
-    c[ImGuiCol_TitleBgActive]          = broc(0xece9ff);
-    c[ImGuiCol_TitleBgCollapsed]       = broc(0xf6f8fa);
-    c[ImGuiCol_MenuBarBg]              = broc(0xf6f8fa);
-    c[ImGuiCol_ScrollbarBg]            = broc(0xf6f8fa);
-    c[ImGuiCol_ScrollbarGrab]          = broc(0xc9ced6);
-    c[ImGuiCol_ScrollbarGrabHovered]   = broc(0xaeb5c0);
-    c[ImGuiCol_ScrollbarGrabActive]    = broc(0x9d97ff);
-    c[ImGuiCol_CheckMark]              = broc(0x625afa);
-    c[ImGuiCol_SliderGrab]             = broc(0x625afa);
-    c[ImGuiCol_SliderGrabActive]       = broc(0x4f46e5);
-    c[ImGuiCol_Button]                 = broc(0x9d97ff);
-    c[ImGuiCol_ButtonHovered]          = broc(0xb49cfc);
-    c[ImGuiCol_ButtonActive]           = broc(0x8a83ef);
-    c[ImGuiCol_Header]                 = broc(0xf0edff);
-    c[ImGuiCol_HeaderHovered]          = broc(0xe4e0ff);
-    c[ImGuiCol_HeaderActive]           = broc(0x9d97ff);
-    c[ImGuiCol_Separator]              = broc(0xd5dbe1);
-    c[ImGuiCol_SeparatorHovered]       = broc(0x9d97ff);
-    c[ImGuiCol_SeparatorActive]        = broc(0x625afa);
-    c[ImGuiCol_ResizeGrip]             = broc(0xc9ced6);
-    c[ImGuiCol_ResizeGripHovered]      = broc(0x9d97ff);
-    c[ImGuiCol_ResizeGripActive]       = broc(0x625afa);
-    c[ImGuiCol_Tab]                    = broc(0xf6f8fa);
-    c[ImGuiCol_TabHovered]             = broc(0xe4e0ff);
-    c[ImGuiCol_TabSelected]            = broc(0x9d97ff);
-    c[ImGuiCol_TabSelectedOverline]    = broc(0x625afa);
-    c[ImGuiCol_TabDimmed]              = broc(0xf0f2f5);
-    c[ImGuiCol_TabDimmedSelected]      = broc(0xded9ff);
-    c[ImGuiCol_DockingPreview]         = broc(0x9d97ff, 0.5f);
-    c[ImGuiCol_DockingEmptyBg]         = broc(0xf6f8fa);
-    c[ImGuiCol_TableHeaderBg]          = broc(0xf6f8fa);
-    c[ImGuiCol_TableBorderStrong]      = broc(0xd5dbe1);
-    c[ImGuiCol_TableBorderLight]       = broc(0xe8ebef);
+    c[ImGuiCol_Border]                 = broc(0xd4d4d4);
+    c[ImGuiCol_BorderShadow]           = broc(0x000000, 0.04f);
+    c[ImGuiCol_FrameBg]                = broc(0xffffff);
+    c[ImGuiCol_FrameBgHovered]         = broc(0xf0f0f0);
+    c[ImGuiCol_FrameBgActive]          = broc(0xe4e4e4);
+    c[ImGuiCol_TitleBg]                = broc(0xf3f3f3);
+    c[ImGuiCol_TitleBgActive]          = broc(0xe8e8e8);
+    c[ImGuiCol_TitleBgCollapsed]       = broc(0xf3f3f3);
+    c[ImGuiCol_MenuBarBg]              = broc(0xf3f3f3);
+    c[ImGuiCol_ScrollbarBg]            = broc(0xf8f8f8);
+    c[ImGuiCol_ScrollbarGrab]          = broc(0xc1c1c1);
+    c[ImGuiCol_ScrollbarGrabHovered]   = broc(0xa8a8a8);
+    c[ImGuiCol_ScrollbarGrabActive]    = broc(0x8c8c8c);
+    c[ImGuiCol_CheckMark]              = broc(0x007acc);
+    c[ImGuiCol_SliderGrab]             = broc(0x007acc);
+    c[ImGuiCol_SliderGrabActive]       = broc(0x005a9e);
+    c[ImGuiCol_Button]                 = broc(0xf3f3f3);
+    c[ImGuiCol_ButtonHovered]          = broc(0xe6e6e6);
+    c[ImGuiCol_ButtonActive]           = broc(0xd6d6d6);
+    c[ImGuiCol_Header]                 = broc(0xe8e8e8);
+    c[ImGuiCol_HeaderHovered]          = broc(0xdcdcdc);
+    c[ImGuiCol_HeaderActive]           = broc(0xcce8ff);
+    c[ImGuiCol_Separator]              = broc(0xe5e5e5);
+    c[ImGuiCol_SeparatorHovered]       = broc(0x007acc);
+    c[ImGuiCol_SeparatorActive]        = broc(0x005a9e);
+    c[ImGuiCol_ResizeGrip]             = broc(0xc1c1c1);
+    c[ImGuiCol_ResizeGripHovered]      = broc(0x007acc);
+    c[ImGuiCol_ResizeGripActive]       = broc(0x005a9e);
+    c[ImGuiCol_Tab]                    = broc(0xf3f3f3);
+    c[ImGuiCol_TabHovered]             = broc(0xe8e8e8);
+    c[ImGuiCol_TabSelected]            = broc(0xffffff);
+    c[ImGuiCol_TabSelectedOverline]    = broc(0x007acc);
+    c[ImGuiCol_TabDimmed]              = broc(0xf0f0f0);
+    c[ImGuiCol_TabDimmedSelected]      = broc(0xe8e8e8);
+    c[ImGuiCol_DockingPreview]         = broc(0x007acc, 0.4f);
+    c[ImGuiCol_DockingEmptyBg]         = broc(0xf3f3f3);
+    c[ImGuiCol_TableHeaderBg]          = broc(0xf3f3f3);
+    c[ImGuiCol_TableBorderStrong]      = broc(0xd4d4d4);
+    c[ImGuiCol_TableBorderLight]       = broc(0xe5e5e5);
     c[ImGuiCol_TableRowBg]             = broc(0xffffff);
-    c[ImGuiCol_TableRowBgAlt]          = broc(0xf6f8fa);
-    c[ImGuiCol_TextSelectedBg]         = broc(0x9d97ff, 0.35f);
-    c[ImGuiCol_DragDropTarget]         = broc(0x625afa);
-    c[ImGuiCol_NavCursor]              = broc(0x625afa);
-    c[ImGuiCol_TextLink]               = broc(0x625afa);
-    c[ImGuiCol_TreeLines]              = broc(0xd5dbe1);
-    c[ImGuiCol_NavWindowingHighlight]  = broc(0x625afa, 0.7f);
-    c[ImGuiCol_NavWindowingDimBg]      = broc(0x1a1b25, 0.2f);
-    c[ImGuiCol_ModalWindowDimBg]       = broc(0x1a1b25, 0.35f);
+    c[ImGuiCol_TableRowBgAlt]          = broc(0xf8f8f8);
+    c[ImGuiCol_TextSelectedBg]         = broc(0xcce8ff);
+    c[ImGuiCol_DragDropTarget]         = broc(0x007acc);
+    c[ImGuiCol_NavCursor]              = broc(0x007acc);
+    c[ImGuiCol_TextLink]               = broc(0x007acc);
+    c[ImGuiCol_TreeLines]              = broc(0xd4d4d4);
+    c[ImGuiCol_NavWindowingHighlight]  = broc(0x007acc, 0.6f);
+    c[ImGuiCol_NavWindowingDimBg]      = broc(0x000000, 0.1f);
+    c[ImGuiCol_ModalWindowDimBg]       = broc(0x000000, 0.25f);
 }
 
 /* --------------------------------------------------------------------------
@@ -184,9 +183,9 @@ extern "C" void dcad_gui_apply_zed_theme(void)
     c[ImGuiCol_CheckMark]              = broc(0x8b9bff);
     c[ImGuiCol_SliderGrab]             = broc(0x8b9bff);
     c[ImGuiCol_SliderGrabActive]       = broc(0xa5b2ff);
-    c[ImGuiCol_Button]                 = broc(0x343b42);
-    c[ImGuiCol_ButtonHovered]          = broc(0x414a53);
-    c[ImGuiCol_ButtonActive]           = broc(0x4d5863);
+    c[ImGuiCol_Button]                 = broc(0x262b30);
+    c[ImGuiCol_ButtonHovered]          = broc(0x333b43);
+    c[ImGuiCol_ButtonActive]           = broc(0x3d4752);
     c[ImGuiCol_Header]                 = broc(0x2b3137);
     c[ImGuiCol_HeaderHovered]          = broc(0x353d45);
     c[ImGuiCol_HeaderActive]           = broc(0x465263);
@@ -297,14 +296,20 @@ extern "C" void dcad_gui_text_colored(const char* text, float r, float g, float 
 }
 extern "C" int dcad_gui_button(const char* label)
 {
-    // Brocanth uses anthracite text on its coloured buttons (5.3:1 contrast).
-    ImGui::PushStyleColor(ImGuiCol_Text, broc(0x2b2f36));
+    // Use the theme's text/button colours (VS Code light: dark text on #f3f3f3),
+    // with slightly tighter buttons than ImGui's default.
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 4));
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 2.0f);
     bool pressed = ImGui::Button(label);
-    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(2);
     return pressed ? 1 : 0;
 }
 extern "C" void dcad_gui_same_line(void) { ImGui::SameLine(); }
 extern "C" void dcad_gui_separator(void) { ImGui::Separator(); }
+extern "C" void dcad_gui_vertical_separator(void)
+{
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+}
 extern "C" void dcad_gui_spacing(void) { ImGui::Spacing(); }
 
 extern "C" void dcad_gui_image(void* texID, float w, float h)
@@ -419,27 +424,28 @@ extern "C" void dcad_textedit_set_light_palette(void* ed)
         p[static_cast<size_t>(i)] =
             IM_COL32((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff, a);
     };
-    set(PI::Default,           0x414552);
-    set(PI::Keyword,           0x625afa);
-    set(PI::Number,            0xb45309);
-    set(PI::String,            0x2e7d32);
-    set(PI::CharLiteral,       0x2e7d32);
-    set(PI::Punctuation,       0x4a4f5c);
-    set(PI::Preprocessor,      0x0f766e);
-    set(PI::Identifier,        0x1a1b25);
-    set(PI::KnownIdentifier,   0x625afa);
-    set(PI::PreprocIdentifier, 0xb14b8a);
-    set(PI::Comment,           0x8b8f9a);
-    set(PI::MultiLineComment,  0x8b8f9a);
+    // VS Code Light+ syntax colours.
+    set(PI::Default,           0x333333);
+    set(PI::Keyword,           0x0000ff);
+    set(PI::Number,            0x098658);
+    set(PI::String,            0xa31515);
+    set(PI::CharLiteral,       0xa31515);
+    set(PI::Punctuation,       0x383838);
+    set(PI::Preprocessor,      0x800000);
+    set(PI::Identifier,        0x333333);
+    set(PI::KnownIdentifier,   0x267f99);
+    set(PI::PreprocIdentifier, 0x800000);
+    set(PI::Comment,           0x008000);
+    set(PI::MultiLineComment,  0x008000);
     set(PI::Background,        0xffffff);
-    set(PI::Cursor,            0x625afa);
-    set(PI::Selection,         0x9d97ff, 0x47);
-    set(PI::ErrorMarker,       0xdc2626, 0xa0);
-    set(PI::Breakpoint,        0xf59e0b, 0x80);
-    set(PI::LineNumber,        0x9aa0ab);
-    set(PI::CurrentLineFill,   0xf6f8fa, 0x80);
-    set(PI::CurrentLineFillInactive, 0xf6f8fa, 0x40);
-    set(PI::CurrentLineEdge,   0xd5dbe1, 0x80);
+    set(PI::Cursor,            0x333333);
+    set(PI::Selection,         0xcce8ff);
+    set(PI::ErrorMarker,       0xe51400, 0xa0);
+    set(PI::Breakpoint,        0xe51400, 0x80);
+    set(PI::LineNumber,        0x999999);
+    set(PI::CurrentLineFill,   0xf0f0f0, 0x80);
+    set(PI::CurrentLineFillInactive, 0xf8f8f8, 0x60);
+    set(PI::CurrentLineEdge,   0xe5e5e5, 0x80);
     static_cast<TextEditor*>(ed)->SetPalette(p);
 }
 

@@ -11,10 +11,12 @@ brew install glfw                     # one-time, macOS
 dub run :gui
 ```
 
-The window opens with a default script already loaded and rendered in a dark,
-minimal Zed-like theme (near-black panes, cool grey chrome, blue-violet accent,
-tight spacing). Edit the script, press **Cmd/Ctrl+Enter** (or click **Run**) to
-recompile and re-mesh.
+The window opens with a default script already loaded and rendered in a Visual
+Studio Code **Light+** theme (white editor, `#f3f3f3` chrome, `#333333` text,
+`#007acc` accents, thin borders). The 3D preview uses an OpenSCAD-style renderer:
+near-white background, neutral light-grey shaded geometry, and the classic RGB
+axis cross and ground grid. Edit the script, press **Cmd/Ctrl+Enter** (or click
+**Run**) to recompile and re-mesh.
 
 The left sidebar shows the repository file tree. Click a disclosure arrow to
 expand or collapse folders, and click a file to load it into the editor. Use
@@ -32,15 +34,16 @@ demo.
 | Zoom | Scroll over the viewport |
 | Standard view | `Fit`, `Iso`, `Top`, `Bottom`, `Front`, `Back`, `Right`, `Left` |
 | Display toggles | `Axes`, `Grid`, `Wireframe`, `Ortho` checkboxes |
-| Export STEP | `Export STEP` button → writes `dcad-export.step` |
+| Export STEP | `STEP` button → writes `dcad-export.step` |
 | Save script | `Save` button → writes the open file, or `.dcad-gui-state` |
 | Project tree | Expand/collapse folders; click a file to open it; `<<` / `>>` collapse rail |
 | Animate | `Animate` checkbox, `Restart`, `Time`, `FPS`, `Steps` (animated scripts only) |
 
 The sidebar, editor, and preview panes use a fixed 220px / 44% / 56% split: they
 cannot be dragged, resized or re-docked, and none has a title header. The
-sidebar collapses to a 34px rail. Both the UI chrome and the 3D render use the
-dark Zed-like palette. Each pane sizes its main area to the space that remains;
+sidebar collapses to a 34px rail. The UI chrome uses the VS Code Light+ palette;
+the 3D render uses the OpenSCAD-style light renderer. Each pane sizes its main
+area to the space that remains;
 the editor and sidebar keep scrollbars enabled for long content, while the
 preview pane never scrolls.
 

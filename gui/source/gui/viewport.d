@@ -115,9 +115,9 @@ void main()
     vec3 n = normalize(vNormal);
     vec3 light = normalize(vec3(0.4, 0.7, 1.0));
     float diff = max(dot(n, light), 0.0);
-    // Zed-like blue-violet, bright enough to read on the dark pane.
-    vec3 base = vec3(0.54, 0.59, 1.0);
-    vec3 col = base * (0.55 + 0.45 * diff);
+    // OpenSCAD-style neutral light grey with soft, flat shading.
+    vec3 base = vec3(0.82, 0.85, 0.88);
+    vec3 col = base * (0.68 + 0.32 * diff);
     gl_FragColor = vec4(col, 1.0);
 }
 FS";
@@ -362,7 +362,7 @@ private:
         immutable cy = mesh.center[1];
         immutable z = baseZ - 0.5f;
         immutable ext = mesh.radius * 2.2f;
-        float[3] grey = [0.22f, 0.25f, 0.29f];
+        float[3] grey = [0.72f, 0.74f, 0.76f];
         foreach (i; 0 .. 11)
         {
             immutable f = -ext + 2 * ext * i / 10.0f;
@@ -370,11 +370,11 @@ private:
             addLine(v, [cx - ext, cy + f, z], [cx + ext, cy + f, z], grey);
         }
         immutable len = mesh.radius * 1.3f;
-        addLine(v, [cx, cy, z], [cx + len, cy, z], [0.86f, 0.22f, 0.22f]);
-        addLine(v, [cx, cy, z], [cx, cy + len, z], [0.16f, 0.64f, 0.28f]);
-        addLine(v, [cx, cy, z], [cx, cy, z + len], [0.20f, 0.36f, 0.86f]);
-        addLine(v, [cx, cy, z], [cx - len, cy, z], [0.94f, 0.68f, 0.68f]);
-        addLine(v, [cx, cy, z], [cx, cy - len, z], [0.68f, 0.87f, 0.70f]);
+        addLine(v, [cx, cy, z], [cx + len, cy, z], [0.80f, 0.18f, 0.18f]);
+        addLine(v, [cx, cy, z], [cx, cy + len, z], [0.12f, 0.55f, 0.20f]);
+        addLine(v, [cx, cy, z], [cx, cy, z + len], [0.16f, 0.40f, 0.82f]);
+        addLine(v, [cx, cy, z], [cx - len, cy, z], [0.92f, 0.62f, 0.62f]);
+        addLine(v, [cx, cy, z], [cx, cy - len, z], [0.62f, 0.82f, 0.65f]);
 
         glBindBuffer(GL_ARRAY_BUFFER, guideVbo);
         glBufferData(GL_ARRAY_BUFFER, v.length * float.sizeof,
@@ -463,8 +463,8 @@ public:
         }
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         glViewport(0, 0, width, height);
-        // Zed near-black canvas (#1b1d1f) to match the chrome.
-        glClearColor(0.106f, 0.114f, 0.122f, 1);
+        // OpenSCAD-style near-white canvas.
+        glClearColor(0.98f, 0.98f, 0.98f, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
 
