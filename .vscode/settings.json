@@ -1,0 +1,15 @@
+{
+  "d.enableAutoComplete": true,
+  "d.enableLinting": true,
+  "d.enableSDLLinting": true,
+  "d.enableDubLinting": true,
+  "d.enableFormatting": true,
+  "d.dubCompiler": "ldc2",
+  "d.servedReleaseChannel": "stable",
+  "[d]": {
+    "editor.defaultFormatter": "webfreak.code-d"
+  },
+  "[sdl]": {
+    "editor.defaultFormatter": "webfreak.code-d"
+  }
+}

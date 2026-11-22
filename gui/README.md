@@ -11,12 +11,14 @@ brew install glfw                     # one-time, macOS
 dub run :gui
 ```
 
-The window opens with a default script already loaded and rendered in a Visual
-Studio Code **Light+** theme (white editor, `#f3f3f3` chrome, `#333333` text,
-`#007acc` accents, thin borders). The 3D preview uses an OpenSCAD-style renderer:
-near-white background, neutral light-grey shaded geometry, and the classic RGB
-axis cross and ground grid. Edit the script, press **Cmd/Ctrl+Enter** (or click
-**Run**) to recompile and re-mesh.
+The window opens with a default script already loaded and rendered in your
+VS Code **Base16 Default Light** palette (`#f8f8f8` editor, `#f9f9f9` sidebar,
+`#383838` text, `#7cafc2` accents). The code editor uses D-aware syntax colours
+from the same theme, with D keywords and `@attribute` highlighting. The 3D
+preview uses an OpenSCAD-style renderer: near-white background, neutral
+light-grey shaded geometry, and the classic RGB axis cross and ground grid.
+Edit the script, press **Cmd/Ctrl+Enter** (or click **Run**) to recompile and
+re-mesh.
 
 The left sidebar shows the repository file tree. Click a disclosure arrow to
 expand or collapse folders, and click a file to load it into the editor. Use
@@ -41,9 +43,9 @@ demo.
 
 The sidebar, editor, and preview panes use a fixed 220px / 44% / 56% split: they
 cannot be dragged, resized or re-docked, and none has a title header. The
-sidebar collapses to a 34px rail. The UI chrome uses the VS Code Light+ palette;
-the 3D render uses the OpenSCAD-style light renderer. Each pane sizes its main
-area to the space that remains;
+sidebar collapses to a 34px rail. The UI chrome and code editor use your VS Code
+Base16 Default Light palette; the 3D render uses the OpenSCAD-style light
+renderer. Each pane sizes its main area to the space that remains;
 the editor and sidebar keep scrollbars enabled for long content, while the
 preview pane never scrolls.
 

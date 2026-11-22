@@ -38,9 +38,8 @@ extern "C" void dcad_gui_init(void* window, const char* glslVersion)
 }
 
 /* --------------------------------------------------------------------------
- * Visual Studio Code "Light+" theme, translated to ImGui.
- * White editor background, #f3f3f3 sidebar/chrome, #333333 text, #007acc
- * blue accents, square-ish controls and thin #d4d4d4 borders.
+ * The user's Visual Studio Code theme: Base16 Default Light, translated to
+ * ImGui. Sidebar background uses the user's #f9f9f9 override.
  * -------------------------------------------------------------------------- */
 
 static ImVec4 broc(unsigned int rgb, float a = 1.0f)
@@ -55,10 +54,10 @@ extern "C" void dcad_gui_apply_light_theme(void)
     ImGui::StyleColorsLight();
     ImGuiStyle& s = ImGui::GetStyle();
 
-    // VS Code uses almost square corners and thin borders.
+    // VS Code / Base16: small radii, thin borders, compact controls.
     s.WindowRounding = 2.0f;
     s.ChildRounding = 2.0f;
-    s.PopupRounding = 4.0f;
+    s.PopupRounding = 3.0f;
     s.FrameRounding = 2.0f;
     s.ScrollbarRounding = 2.0f;
     s.GrabRounding = 2.0f;
@@ -75,59 +74,60 @@ extern "C" void dcad_gui_apply_light_theme(void)
     s.FrameBorderSize = 1.0f;
     s.PopupBorderSize = 1.0f;
 
+    // Base16 Default Light, with the user's sideBar.background override.
     ImVec4* c = s.Colors;
-    c[ImGuiCol_Text]                   = broc(0x333333);
-    c[ImGuiCol_TextDisabled]           = broc(0x999999);
-    c[ImGuiCol_WindowBg]               = broc(0xffffff);
-    c[ImGuiCol_ChildBg]                = broc(0xf3f3f3);
-    c[ImGuiCol_PopupBg]                = broc(0xffffff);
-    c[ImGuiCol_Border]                 = broc(0xd4d4d4);
+    c[ImGuiCol_Text]                   = broc(0x383838);
+    c[ImGuiCol_TextDisabled]           = broc(0xb8b8b8);
+    c[ImGuiCol_WindowBg]               = broc(0xf8f8f8);
+    c[ImGuiCol_ChildBg]                = broc(0xf9f9f9);
+    c[ImGuiCol_PopupBg]                = broc(0xf8f8f8);
+    c[ImGuiCol_Border]                 = broc(0xe8e8e8);
     c[ImGuiCol_BorderShadow]           = broc(0x000000, 0.04f);
-    c[ImGuiCol_FrameBg]                = broc(0xffffff);
-    c[ImGuiCol_FrameBgHovered]         = broc(0xf0f0f0);
-    c[ImGuiCol_FrameBgActive]          = broc(0xe4e4e4);
-    c[ImGuiCol_TitleBg]                = broc(0xf3f3f3);
-    c[ImGuiCol_TitleBgActive]          = broc(0xe8e8e8);
-    c[ImGuiCol_TitleBgCollapsed]       = broc(0xf3f3f3);
-    c[ImGuiCol_MenuBarBg]              = broc(0xf3f3f3);
+    c[ImGuiCol_FrameBg]                = broc(0xf8f8f8);
+    c[ImGuiCol_FrameBgHovered]         = broc(0xe8e8e8);
+    c[ImGuiCol_FrameBgActive]          = broc(0xd8d8d8);
+    c[ImGuiCol_TitleBg]                = broc(0xe8e8e8);
+    c[ImGuiCol_TitleBgActive]          = broc(0xd8d8d8);
+    c[ImGuiCol_TitleBgCollapsed]       = broc(0xe8e8e8);
+    c[ImGuiCol_MenuBarBg]              = broc(0xf8f8f8);
     c[ImGuiCol_ScrollbarBg]            = broc(0xf8f8f8);
-    c[ImGuiCol_ScrollbarGrab]          = broc(0xc1c1c1);
-    c[ImGuiCol_ScrollbarGrabHovered]   = broc(0xa8a8a8);
-    c[ImGuiCol_ScrollbarGrabActive]    = broc(0x8c8c8c);
-    c[ImGuiCol_CheckMark]              = broc(0x007acc);
-    c[ImGuiCol_SliderGrab]             = broc(0x007acc);
-    c[ImGuiCol_SliderGrabActive]       = broc(0x005a9e);
-    c[ImGuiCol_Button]                 = broc(0xf3f3f3);
-    c[ImGuiCol_ButtonHovered]          = broc(0xe6e6e6);
-    c[ImGuiCol_ButtonActive]           = broc(0xd6d6d6);
+    c[ImGuiCol_ScrollbarGrab]          = broc(0xd8d8d8);
+    c[ImGuiCol_ScrollbarGrabHovered]   = broc(0xb8b8b8);
+    c[ImGuiCol_ScrollbarGrabActive]    = broc(0x585858);
+    c[ImGuiCol_CheckMark]              = broc(0x7cafc2);
+    c[ImGuiCol_SliderGrab]             = broc(0x7cafc2);
+    c[ImGuiCol_SliderGrabActive]       = broc(0x585858);
+    c[ImGuiCol_Button]                 = broc(0x7cafc2);
+    c[ImGuiCol_ButtonHovered]          = broc(0xd8d8d8);
+    c[ImGuiCol_ButtonActive]           = broc(0xb8b8b8);
     c[ImGuiCol_Header]                 = broc(0xe8e8e8);
-    c[ImGuiCol_HeaderHovered]          = broc(0xdcdcdc);
-    c[ImGuiCol_HeaderActive]           = broc(0xcce8ff);
-    c[ImGuiCol_Separator]              = broc(0xe5e5e5);
-    c[ImGuiCol_SeparatorHovered]       = broc(0x007acc);
-    c[ImGuiCol_SeparatorActive]        = broc(0x005a9e);
-    c[ImGuiCol_ResizeGrip]             = broc(0xc1c1c1);
-    c[ImGuiCol_ResizeGripHovered]      = broc(0x007acc);
-    c[ImGuiCol_ResizeGripActive]       = broc(0x005a9e);
-    c[ImGuiCol_Tab]                    = broc(0xf3f3f3);
-    c[ImGuiCol_TabHovered]             = broc(0xe8e8e8);
-    c[ImGuiCol_TabSelected]            = broc(0xffffff);
-    c[ImGuiCol_TabSelectedOverline]    = broc(0x007acc);
+    c[ImGuiCol_HeaderHovered]          = broc(0xd8d8d8);
+    c[ImGuiCol_HeaderActive]           = broc(0x7cafc2, 0.45f);
+    c[ImGuiCol_Separator]              = broc(0xe8e8e8);
+    c[ImGuiCol_SeparatorHovered]       = broc(0x7cafc2);
+    c[ImGuiCol_SeparatorActive]        = broc(0x585858);
+    c[ImGuiCol_ResizeGrip]             = broc(0xd8d8d8);
+    c[ImGuiCol_ResizeGripHovered]      = broc(0x7cafc2);
+    c[ImGuiCol_ResizeGripActive]       = broc(0x585858);
+    c[ImGuiCol_Tab]                    = broc(0xe8e8e8);
+    c[ImGuiCol_TabHovered]             = broc(0xd8d8d8);
+    c[ImGuiCol_TabSelected]            = broc(0xf8f8f8);
+    c[ImGuiCol_TabSelectedOverline]    = broc(0x7cafc2);
     c[ImGuiCol_TabDimmed]              = broc(0xf0f0f0);
     c[ImGuiCol_TabDimmedSelected]      = broc(0xe8e8e8);
-    c[ImGuiCol_DockingPreview]         = broc(0x007acc, 0.4f);
-    c[ImGuiCol_DockingEmptyBg]         = broc(0xf3f3f3);
-    c[ImGuiCol_TableHeaderBg]          = broc(0xf3f3f3);
-    c[ImGuiCol_TableBorderStrong]      = broc(0xd4d4d4);
-    c[ImGuiCol_TableBorderLight]       = broc(0xe5e5e5);
-    c[ImGuiCol_TableRowBg]             = broc(0xffffff);
-    c[ImGuiCol_TableRowBgAlt]          = broc(0xf8f8f8);
-    c[ImGuiCol_TextSelectedBg]         = broc(0xcce8ff);
-    c[ImGuiCol_DragDropTarget]         = broc(0x007acc);
-    c[ImGuiCol_NavCursor]              = broc(0x007acc);
-    c[ImGuiCol_TextLink]               = broc(0x007acc);
-    c[ImGuiCol_TreeLines]              = broc(0xd4d4d4);
-    c[ImGuiCol_NavWindowingHighlight]  = broc(0x007acc, 0.6f);
+    c[ImGuiCol_DockingPreview]         = broc(0x7cafc2, 0.4f);
+    c[ImGuiCol_DockingEmptyBg]         = broc(0xf8f8f8);
+    c[ImGuiCol_TableHeaderBg]          = broc(0xe8e8e8);
+    c[ImGuiCol_TableBorderStrong]      = broc(0xd8d8d8);
+    c[ImGuiCol_TableBorderLight]       = broc(0xe8e8e8);
+    c[ImGuiCol_TableRowBg]             = broc(0xf8f8f8);
+    c[ImGuiCol_TableRowBgAlt]          = broc(0xf0f0f0);
+    c[ImGuiCol_TextSelectedBg]         = broc(0xd8d8d8);
+    c[ImGuiCol_DragDropTarget]         = broc(0x7cafc2);
+    c[ImGuiCol_NavCursor]              = broc(0x7cafc2);
+    c[ImGuiCol_TextLink]               = broc(0x7cafc2);
+    c[ImGuiCol_TreeLines]              = broc(0xd8d8d8);
+    c[ImGuiCol_NavWindowingHighlight]  = broc(0x7cafc2, 0.6f);
     c[ImGuiCol_NavWindowingDimBg]      = broc(0x000000, 0.1f);
     c[ImGuiCol_ModalWindowDimBg]       = broc(0x000000, 0.25f);
 }
@@ -296,12 +296,13 @@ extern "C" void dcad_gui_text_colored(const char* text, float r, float g, float 
 }
 extern "C" int dcad_gui_button(const char* label)
 {
-    // Use the theme's text/button colours (VS Code light: dark text on #f3f3f3),
-    // with slightly tighter buttons than ImGui's default.
+    // Base16 Light button.foreground is #181818 on the blue button background.
+    ImGui::PushStyleColor(ImGuiCol_Text, broc(0x181818));
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 4));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 2.0f);
     bool pressed = ImGui::Button(label);
     ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor();
     return pressed ? 1 : 0;
 }
 extern "C" void dcad_gui_same_line(void) { ImGui::SameLine(); }
@@ -409,10 +410,39 @@ extern "C" int dcad_gui_mouse_clicked(int button)
  * ImGuiColorTextEdit
  * -------------------------------------------------------------------------- */
 
+static TextEditor::LanguageDefinition dLanguageDefinition()
+{
+    // ImGuiColorTextEdit has no D grammar; C++ is the closest built-in, so
+    // extend it with D keywords, built-in types and @attribute highlighting.
+    auto lang = TextEditor::LanguageDefinition::CPlusPlus();
+    lang.mName = "D";
+    const char* keywords[] = {
+        "abstract", "alias", "align", "asm", "auto", "body", "cast", "class",
+        "const", "continue", "debug", "delegate", "deprecated", "do", "else",
+        "enum", "export", "extern", "final", "finally", "foreach", "foreach_reverse",
+        "for", "function", "goto", "if", "immutable", "import", "in", "inout",
+        "interface", "invariant", "is", "lazy", "mixin", "module", "new", "nothrow",
+        "out", "override", "package", "pragma", "private", "protected", "public",
+        "pure", "ref", "return", "scope", "shared", "static", "struct", "super",
+        "switch", "synchronized", "template", "this", "throw", "try", "typedef",
+        "typeof", "union", "unittest", "version", "while", "with",
+        "bool", "byte", "cdouble", "cent", "cfloat", "char", "creal", "dchar",
+        "double", "float", "idouble", "ifloat", "int", "ireal", "long", "real",
+        "short", "size_t", "string", "ubyte", "ucent", "uint", "ulong", "ushort",
+        "void", "wchar"
+    };
+    for (const char* keyword : keywords)
+        lang.mKeywords.insert(keyword);
+    lang.mTokenRegexStrings.push_back(
+        {std::string("@[A-Za-z_][A-Za-z0-9_]*"),
+         TextEditor::PaletteIndex::Preprocessor});
+    return lang;
+}
+
 extern "C" void* dcad_textedit_new(void)
 {
     TextEditor* ed = new TextEditor();
-    ed->SetLanguageDefinition(TextEditor::LanguageDefinition::CPlusPlus());
+    ed->SetLanguageDefinition(dLanguageDefinition());
     return ed;
 }
 extern "C" void dcad_textedit_free(void* ed) { delete static_cast<TextEditor*>(ed); }
@@ -424,28 +454,28 @@ extern "C" void dcad_textedit_set_light_palette(void* ed)
         p[static_cast<size_t>(i)] =
             IM_COL32((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff, a);
     };
-    // VS Code Light+ syntax colours.
-    set(PI::Default,           0x333333);
-    set(PI::Keyword,           0x0000ff);
-    set(PI::Number,            0x098658);
-    set(PI::String,            0xa31515);
-    set(PI::CharLiteral,       0xa31515);
+    // Base16 Default Light token colours, mapped to ImGuiColorTextEdit.
+    set(PI::Default,           0x383838);
+    set(PI::Keyword,           0xba8baf);
+    set(PI::Number,            0xdc9656);
+    set(PI::String,            0xa1b56c);
+    set(PI::CharLiteral,       0xdc9656);
     set(PI::Punctuation,       0x383838);
-    set(PI::Preprocessor,      0x800000);
-    set(PI::Identifier,        0x333333);
-    set(PI::KnownIdentifier,   0x267f99);
-    set(PI::PreprocIdentifier, 0x800000);
-    set(PI::Comment,           0x008000);
-    set(PI::MultiLineComment,  0x008000);
-    set(PI::Background,        0xffffff);
-    set(PI::Cursor,            0x333333);
-    set(PI::Selection,         0xcce8ff);
-    set(PI::ErrorMarker,       0xe51400, 0xa0);
-    set(PI::Breakpoint,        0xe51400, 0x80);
-    set(PI::LineNumber,        0x999999);
-    set(PI::CurrentLineFill,   0xf0f0f0, 0x80);
+    set(PI::Preprocessor,      0x7cafc2);
+    set(PI::Identifier,        0x383838);
+    set(PI::KnownIdentifier,   0x7cafc2);
+    set(PI::PreprocIdentifier, 0xba8baf);
+    set(PI::Comment,           0xb8b8b8);
+    set(PI::MultiLineComment,  0xb8b8b8);
+    set(PI::Background,        0xf8f8f8);
+    set(PI::Cursor,            0x383838);
+    set(PI::Selection,         0xd8d8d8);
+    set(PI::ErrorMarker,       0xab4642, 0xa0);
+    set(PI::Breakpoint,        0xf7ca88, 0x80);
+    set(PI::LineNumber,        0xb8b8b8);
+    set(PI::CurrentLineFill,   0xe8e8e8, 0x80);
     set(PI::CurrentLineFillInactive, 0xf8f8f8, 0x60);
-    set(PI::CurrentLineEdge,   0xe5e5e5, 0x80);
+    set(PI::CurrentLineEdge,   0xe8e8e8, 0x80);
     static_cast<TextEditor*>(ed)->SetPalette(p);
 }
 

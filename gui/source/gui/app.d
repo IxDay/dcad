@@ -313,7 +313,7 @@ void main(string[] args)
                 dcad_textedit_set_text(editor, defaultScript.toStringz);
             dcad_gui_same_line();
             dcad_gui_text_colored(displayName.toStringz,
-                                  0.42f, 0.42f, 0.42f, 1);
+                                  0.35f, 0.35f, 0.35f, 1);
             dcad_gui_separator();
 
             // Editor takes whatever is left after the status / error strip, so
@@ -328,11 +328,11 @@ void main(string[] args)
             immutable editorH = available > 80 ? available : 80;
             dcad_textedit_render(editor, "##script", ww - 24, editorH);
 
-            dcad_gui_text_colored(status.toStringz, 0.10f, 0.50f, 0.20f, 1);
+            dcad_gui_text_colored(status.toStringz, 0.63f, 0.71f, 0.42f, 1);
 
             if (showError && lastError.length)
             {
-                dcad_gui_text_colored("ERROR:".toStringz, 0.82f, 0.10f, 0.10f, 1);
+                dcad_gui_text_colored("ERROR:".toStringz, 0.67f, 0.27f, 0.26f, 1);
                 float errX, errY;
                 dcad_gui_get_cursor_screen_pos(&errX, &errY);
                 immutable errRoom = (wy + wh - 8f) - errY;
