@@ -62,6 +62,11 @@ extern(C) nothrow @nogc
     void dcad_gui_render();
     void dcad_gui_dockspace();
 
+    // Icon fonts extracted from VS Code (codicons + Seti file icons).
+    void dcad_gui_push_ui_icon_font();
+    void dcad_gui_push_file_icon_font();
+    void dcad_gui_pop_font();
+
     // windows / widgets
     int  dcad_gui_begin(const(char)* name, int flags);
     void dcad_gui_end();

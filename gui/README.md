@@ -20,12 +20,12 @@ light-grey shaded geometry, and the classic RGB axis cross and ground grid.
 Edit the script, press **Cmd/Ctrl+Enter** (or click **Run**) to recompile and
 re-mesh.
 
-The left sidebar shows the repository file tree with VS Code-style file icons.
-Click a disclosure arrow to expand or collapse folders, and click a file to load
-it into the editor. The sidebar is always visible. The coffee-table sample and
-its animation are available under `samples` for a quick demo; when an animated
-script is loaded, the far-right pane lists its parts and hovering a part
-highlights it in the preview.
+The left sidebar shows the repository file tree with the same file icons VS Code
+uses (its built-in Seti icon theme). Click a disclosure arrow to expand or
+collapse folders, and click a file to load it into the editor. The sidebar is
+always visible. The coffee-table sample and its animation are available under
+`samples` for a quick demo; when an animated script is loaded, the far-right
+pane lists its parts and hovering a part highlights it in the preview.
 
 ## Controls
 
@@ -45,16 +45,18 @@ highlights it in the preview.
 
 The sidebar, editor, preview and parts panes use a fixed 220px / 44% / remaining /
 190px split: they cannot be dragged, resized or re-docked, and none has a title
-header. The parts pane appears only for animated scripts. File icons and preview
-toolbar icons come from the bundled Meslo Nerd Font. The UI chrome and code
-editor use your VS Code Base16 Default Light palette; the 3D render uses the
-OpenSCAD-style light renderer. Each pane sizes its main area to the space that
-remains; the editor and sidebar keep scrollbars enabled for long content, while
-the preview pane never scrolls.
+header. The parts pane appears only for animated scripts. File icons come from
+VS Code's Seti icon theme (`gui/assets/Seti.ttf`) and UI icons from its codicon
+font (`gui/assets/codicon.ttf`); see `gui/assets/LICENSES.md`. The UI chrome and
+code editor use your VS Code Base16 Default Light palette; the 3D render uses
+the OpenSCAD-style light renderer. Each pane sizes its main area to the space
+that remains; the editor and sidebar keep scrollbars enabled for long content,
+while the preview pane never scrolls.
 
 ### Preview toolbar
 
-The viewport has an OpenSCAD-in-VS-Code style icon toolbar with hover tooltips.
+The viewport has an OpenSCAD-in-VS-Code style toolbar built from VS Code's own
+codicon font, with hover tooltips.
 The first row frames the model or switches to one of the six standard views plus
 the default axonometric view. The second row toggles the axis cross, ground grid,
 wireframe rendering and orthographic projection. `Deflection` controls OCCT mesh

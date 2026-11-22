@@ -26,29 +26,50 @@ struct GLFWwindow;
  * ImGui lifecycle
  * -------------------------------------------------------------------------- */
 
+static ImFont* g_uiIconFont = nullptr;   // VS Code codicons
+static ImFont* g_fileIconFont = nullptr; // VS Code Seti file icons
+
+static ImFont* addFontFromAsset(ImGuiIO& io, const char* path, float size,
+                                const ImWchar* ranges)
+{
+    FILE* f = std::fopen(path, "rb");
+    if (!f) return nullptr;
+    std::fclose(f);
+    return io.Fonts->AddFontFromFileTTF(path, size, nullptr, ranges);
+}
+
 static void loadGuiFont(ImGuiIO& io)
 {
-    // Nerd Font PUA glyphs are used for file icons and the preview toolbar.
-    static ImWchar glyphRanges[] = {0x0020, 0x00FF, 0xE000, 0xF8FF, 0};
+    // Text uses the monospace UI font; icons come from VS Code's own fonts.
+    static ImWchar textRange[]  = {0x0020, 0x00FF, 0};
+    static ImWchar codiconRange[] = {0xEA60, 0xECFF, 0};
+    static ImWchar setiRange[]  = {0xE000, 0xE0FF, 0};
+
     char homeFont[1024] = {0};
     if (const char* home = std::getenv("HOME"))
         std::snprintf(homeFont, sizeof(homeFont),
                       "%s/Library/Fonts/mesloLGS_NF_regular.ttf", home);
 
-    const char* candidates[] = {
+    bool haveTextFont = false;
+    const char* textCandidates[] = {
         "gui/assets/MesloLGS_NF_Regular.ttf",
         homeFont,
     };
-    for (const char* path : candidates)
+    for (const char* path : textCandidates)
     {
         if (!path || !*path) continue;
-        FILE* f = std::fopen(path, "rb");
-        if (!f) continue;
-        std::fclose(f);
-        io.Fonts->AddFontFromFileTTF(path, 15.0f, nullptr, glyphRanges);
-        return;
+        if (addFontFromAsset(io, path, 15.0f, textRange))
+        {
+            haveTextFont = true;
+            break;
+        }
     }
-    io.Fonts->AddFontDefault();
+    if (!haveTextFont) io.Fonts->AddFontDefault();
+
+    g_uiIconFont = addFontFromAsset(io, "gui/assets/codicon.ttf",
+                                    16.0f, codiconRange);
+    g_fileIconFont = addFontFromAsset(io, "gui/assets/Seti.ttf",
+                                      19.0f, setiRange);
 }
 
 extern "C" void dcad_gui_init(void* window, const char* glslVersion)
@@ -274,6 +295,19 @@ extern "C" void dcad_gui_dockspace(void)
 /* --------------------------------------------------------------------------
  * Windows and widgets
  * -------------------------------------------------------------------------- */
+
+extern "C" void dcad_gui_push_ui_icon_font(void)
+{
+    // Always push something so the matching PopFont() stays balanced.
+    ImGui::PushFont(g_uiIconFont ? g_uiIconFont : ImGui::GetFont());
+}
+
+extern "C" void dcad_gui_push_file_icon_font(void)
+{
+    ImGui::PushFont(g_fileIconFont ? g_fileIconFont : ImGui::GetFont());
+}
+
+extern "C" void dcad_gui_pop_font(void) { ImGui::PopFont(); }
 
 extern "C" int dcad_gui_begin(const char* name, int flags)
 {

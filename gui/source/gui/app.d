@@ -40,28 +40,40 @@ private enum string stateFile = ".dcad-gui-state";
 private enum float sidebarWidth = 220f;
 private enum float partsWidth = 190f;
 
-// Nerd Font glyphs (same icon set for the tree and the preview toolbar).
-private enum iconFolder      = "\uF07B";
-private enum iconFolderOpen  = "\uF07C";
-private enum iconFile        = "\uF15B";
-private enum iconFileCode    = "\uF1C9";
-private enum iconFileText    = "\uF0F6";
-private enum iconTerminal    = "\uF489";
-private enum iconCube        = "\uF1B2";
-private enum iconFit         = "\uF0B2";
-private enum iconUp          = "\uF062";
-private enum iconDown        = "\uF063";
-private enum iconRight       = "\uF061";
-private enum iconLeft        = "\uF060";
-private enum iconEye         = "\uF06E";
-private enum iconEyeOff      = "\uF070";
-private enum iconRefresh     = "\uF021";
-private enum iconCrosshair   = "\uF05B";
-private enum iconGrid        = "\uF00A";
-private enum iconSquare      = "\uF0C8";
-private enum iconCheck       = "\uF00C";
-private enum iconPlay        = "\uF04B";
-private enum iconPause       = "\uF04C";
+// UI icons: VS Code codicons (from the built-in `codicon.ttf`).
+private enum iconFolder      = "\uEA83"; // folder
+private enum iconFolderOpen  = "\uEAF7"; // folder-opened
+private enum iconCube        = "\uEA8B"; // symbol-object
+private enum iconFit         = "\uEBF8"; // target
+private enum iconUp          = "\uEBFF"; // arrow-circle-up
+private enum iconDown        = "\uEBFC"; // arrow-circle-down
+private enum iconFront       = "\uEA70"; // eye
+private enum iconBack        = "\uEAE7"; // eye-closed
+private enum iconRight       = "\uEBFE"; // arrow-circle-right
+private enum iconLeft        = "\uEBFD"; // arrow-circle-left
+private enum iconRefresh     = "\uEB37"; // refresh
+private enum iconCrosshair   = "\uEBD5"; // compass
+private enum iconGrid        = "\uEBB7"; // table
+private enum iconWire        = "\uEBD2"; // layers
+private enum iconSquare      = "\uEA72"; // primitive-square
+private enum iconCheck       = "\uEAB2"; // check
+private enum iconPlay        = "\uEB2C"; // run
+private enum iconPause       = "\uEAD1"; // debug-pause
+private enum iconRestart     = "\uEAD2"; // debug-restart
+
+// Seti file icons: VS Code's built-in `theme-seti` extension.
+private struct FileIcon
+{
+    string glyph;
+    float r, g, b;
+}
+
+private enum iconFileD       = FileIcon("\uE020", 0.722f, 0.220f, 0.239f); // _d_light
+private enum iconFileJson    = FileIcon("\uE055", 0.718f, 0.718f, 0.231f); // _json_light
+private enum iconFileMarkdown= FileIcon("\uE060", 0.286f, 0.545f, 0.655f); // _markdown_light
+private enum iconFileText    = FileIcon("\uE023", 0.749f, 0.761f, 0.757f); // _default_light
+private enum iconFileShell   = FileIcon("\uE089", 0.498f, 0.682f, 0.259f); // _shell_light
+private enum iconFileConfig  = FileIcon("\uE019", 0.384f, 0.451f, 0.475f); // _config_light
 
 private struct FileEntry
 {
@@ -70,22 +82,24 @@ private struct FileEntry
     bool isDir;
 }
 
-private string fileIcon(string name)
+private FileIcon fileIcon(string name)
 {
     switch (extension(name))
     {
         case ".d":
         case ".di":
+            return iconFileD;
         case ".json":
+            return iconFileJson;
         case ".sdl":
-            return iconFileCode;
+            return iconFileConfig;
         case ".md":
-        case ".txt":
-            return iconFileText;
+        case ".markdown":
+            return iconFileMarkdown;
         case ".sh":
-            return iconTerminal;
+            return iconFileShell;
         default:
-            return iconFile;
+            return iconFileText;
     }
 }
 
@@ -186,9 +200,11 @@ void main(string[] args)
             if (e.isDir)
             {
                 int open = ((key in folderOpen) !is null && folderOpen[key]) ? 1 : 0;
+                dcad_gui_push_ui_icon_font();
                 dcad_gui_text_colored(
                     ((open != 0 ? iconFolderOpen : iconFolder) ~ " ").toStringz,
-                    0.68f, 0.68f, 0.68f, 1);
+                    0.75f, 0.58f, 0.35f, 1);
+                dcad_gui_pop_font();
                 dcad_gui_same_line();
                 if (dcad_gui_tree_node(e.name.toStringz, &open) != 0)
                 {
@@ -202,8 +218,11 @@ void main(string[] args)
             else
             {
                 int selected = key == currentFile ? 1 : 0;
-                dcad_gui_text_colored((fileIcon(e.name) ~ " ").toStringz,
-                                      0.48f, 0.68f, 0.80f, 1);
+                auto fi = fileIcon(e.name);
+                dcad_gui_push_file_icon_font();
+                dcad_gui_text_colored((fi.glyph ~ " ").toStringz,
+                                      fi.r, fi.g, fi.b, 1);
+                dcad_gui_pop_font();
                 dcad_gui_same_line();
                 if (dcad_gui_selectable(e.name.toStringz, selected) != 0)
                 {
@@ -222,18 +241,22 @@ void main(string[] args)
         }
     }
 
-    /// Compact icon button with a VS Code-style hover tooltip.
+    /// Compact codicon button with a VS Code-style hover tooltip.
     bool iconButton(string icon, string tip)
     {
+        dcad_gui_push_ui_icon_font();
         immutable pressed = dcad_gui_button(icon.toStringz) != 0;
+        dcad_gui_pop_font();
         dcad_gui_set_item_tooltip(tip.toStringz);
         return pressed;
     }
 
     bool toggleIconButton(string icon, string tip, bool active)
     {
+        dcad_gui_push_ui_icon_font();
         immutable pressed = dcad_gui_button(
             (icon ~ (active ? " " ~ iconCheck : "")).toStringz) != 0;
+        dcad_gui_pop_font();
         dcad_gui_set_item_tooltip(tip.toStringz);
         return pressed;
     }
@@ -422,7 +445,12 @@ void main(string[] args)
                     auto name = host.animPartName(cast(int) i);
                     if (name is null || !name.length)
                         name = "Part " ~ (i + 1).to!string;
-                    dcad_gui_selectable((iconCube ~ " " ~ name).toStringz, 0);
+                    dcad_gui_push_ui_icon_font();
+                    dcad_gui_text_colored((iconCube ~ " ").toStringz,
+                                          0.48f, 0.68f, 0.80f, 1);
+                    dcad_gui_pop_font();
+                    dcad_gui_same_line();
+                    dcad_gui_selectable(name.toStringz, 0);
                     if (dcad_gui_is_item_hovered())
                         hoveredPart = cast(int) i;
                 }
@@ -449,9 +477,9 @@ void main(string[] args)
             dcad_gui_same_line();
             if (iconButton(iconDown, "Bottom view")) viewport.viewBottom();
             dcad_gui_same_line();
-            if (iconButton(iconEye, "Front view")) viewport.viewFront();
+            if (iconButton(iconFront, "Front view")) viewport.viewFront();
             dcad_gui_same_line();
-            if (iconButton(iconEyeOff, "Back view")) viewport.viewBack();
+            if (iconButton(iconBack, "Back view")) viewport.viewBack();
             dcad_gui_same_line();
             if (iconButton(iconRight, "Right view")) viewport.viewRight();
             dcad_gui_same_line();
@@ -466,7 +494,7 @@ void main(string[] args)
             if (toggleIconButton(iconGrid, "Grid", viewport.gridEnabled()))
                 viewport.setGrid(!viewport.gridEnabled());
             dcad_gui_same_line();
-            if (toggleIconButton(iconCube, "Wireframe",
+            if (toggleIconButton(iconWire, "Wireframe",
                                  viewport.wireframeEnabled()))
                 viewport.setWireframe(!viewport.wireframeEnabled());
             dcad_gui_same_line();
@@ -502,7 +530,7 @@ void main(string[] args)
                                      "Play/Pause animation", animPlaying))
                     animPlaying = !animPlaying;
                 dcad_gui_same_line();
-                if (iconButton(iconRefresh, "Restart animation"))
+                if (iconButton(iconRestart, "Restart animation"))
                 {
                     animTime = 0;
                     animPlaying = true;
