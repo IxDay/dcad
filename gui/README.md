@@ -37,7 +37,9 @@ re-docked. Both the UI chrome and the 3D render use the light brocanth palette.
 The viewport has an OpenSCAD-in-VS-Code style toolbar. The first row frames the
 model or switches to one of the six standard views plus the default axonometric
 view. The second row toggles the axis cross, ground grid, wireframe rendering
-and orthographic projection. `Deflection` controls OCCT mesh density.
+and orthographic projection. `Deflection` controls OCCT mesh density. The pane
+never scrolls: the animation controls sit above the canvas, and the image is
+sized to the space that remains, so everything fits vertically.
 
 ### Animation
 

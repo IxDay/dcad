@@ -186,6 +186,10 @@ extern "C" void dcad_gui_get_window_size(float* w, float* h)
 {
     ImVec2 s = ImGui::GetWindowSize(); *w = s.x; *h = s.y;
 }
+extern "C" void dcad_gui_get_cursor_screen_pos(float* x, float* y)
+{
+    ImVec2 p = ImGui::GetCursorScreenPos(); *x = p.x; *y = p.y;
+}
 extern "C" void dcad_gui_get_viewport_size(float* w, float* h)
 {
     ImVec2 s = ImGui::GetMainViewport()->Size; *w = s.x; *h = s.y;

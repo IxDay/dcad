@@ -12,10 +12,16 @@ enum int windowFlagsNoMove = 1 << 2;
 enum int windowFlagsNoSavedSettings = 1 << 8;
 enum int windowFlagsMenuBar = 1 << 10;
 enum int windowFlagsNoDocking = 1 << 19;
+enum int windowFlagsNoScrollbar = 1 << 3;
+enum int windowFlagsNoScrollWithMouse = 1 << 4;
 
 /// Both panes are locked into a fixed left/right split.
 enum int fixedPaneFlags = windowFlagsNoMove | windowFlagsNoResize |
                           windowFlagsNoDocking | windowFlagsNoSavedSettings;
+
+/// The preview never scrolls: every control and the image fit vertically.
+enum int viewportPaneFlags = fixedPaneFlags | windowFlagsNoScrollbar |
+                             windowFlagsNoScrollWithMouse;
 
 enum int condNone = 0;
 enum int condAlways = 1 << 0;
@@ -60,6 +66,7 @@ extern(C) nothrow @nogc
     void dcad_gui_set_next_window_size(float w, float h, int cond);
     void dcad_gui_get_window_pos(float* x, float* y);
     void dcad_gui_get_window_size(float* w, float* h);
+    void dcad_gui_get_cursor_screen_pos(float* x, float* y);
     void dcad_gui_get_viewport_size(float* w, float* h);
     int  dcad_gui_is_window_hovered();
     int  dcad_gui_is_window_focused();

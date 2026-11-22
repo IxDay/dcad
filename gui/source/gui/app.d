@@ -247,7 +247,7 @@ void main(string[] args)
         // ---------------- Viewport pane ----------------
         dcad_gui_set_next_window_pos(editorW, 0, condAlways);
         dcad_gui_set_next_window_size(vw - editorW, vh, condAlways);
-        if (dcad_gui_begin("3D Viewport", fixedPaneFlags))
+        if (dcad_gui_begin("3D Viewport", viewportPaneFlags))
         {
             float x, y, w, h;
             dcad_gui_get_window_pos(&x, &y);
@@ -307,10 +307,47 @@ void main(string[] args)
             }
             dcad_gui_separator();
 
-            // Reserve room for the toolbar above and the animation panel below.
+            // --- OpenSCAD-style animation panel -----------------------------
+            // Placed above the canvas so the image can absorb all remaining
+            // vertical space; no child window, so there is no scrollbar.
+            if (hasAnimation)
+            {
+                int animate = animPlaying ? 1 : 0;
+                if (dcad_gui_checkbox("Animate", &animate))
+                    animPlaying = animate != 0;
+                dcad_gui_same_line();
+                if (dcad_gui_button("Restart"))
+                {
+                    animTime = 0;
+                    animPlaying = true;
+                }
+                dcad_gui_same_line();
+                immutable tNorm = animTime / cycleSeconds();
+                dcad_gui_text(("  $t = " ~ format("%.2f", tNorm)).toStringz);
+
+                float timeF = cast(float) animTime;
+                dcad_gui_set_next_item_width(240);
+                if (dcad_gui_slider_float("Time", &timeF, 0,
+                                          cast(float) cycleSeconds()) != 0)
+                    animTime = timeF;
+
+                dcad_gui_set_next_item_width(90);
+                if (dcad_gui_input_float("FPS", &animFps, 1) != 0 && animFps < 1)
+                    animFps = 1;
+                dcad_gui_same_line();
+                dcad_gui_set_next_item_width(90);
+                if (dcad_gui_input_int("Steps", &animSteps, 1) != 0 &&
+                    animSteps < 1)
+                    animSteps = 1;
+                dcad_gui_separator();
+            }
+
+            // The canvas takes exactly the space left in the pane.
+            float cursorX, cursorY;
+            dcad_gui_get_cursor_screen_pos(&cursorX, &cursorY);
             immutable imgW = w - 16 > 16 ? w - 16 : 16;
-            immutable canvasH = h - (hasAnimation ? 236f : 126f);
-            immutable imgH = canvasH > 120 ? canvasH : 120;
+            immutable remaining = (y + h - 8f) - cursorY;
+            immutable imgH = remaining > 80 ? remaining : 80;
 
             // Camera interaction: left drag orbit, right/middle drag pan, wheel zoom.
             if (dcad_gui_is_window_hovered())
@@ -348,43 +385,6 @@ void main(string[] args)
             immutable ph = cast(int)(imgH * 2);
             viewport.render(pw, ph);
             dcad_gui_image(viewport.textureID(), imgW, imgH);
-
-            // --- OpenSCAD-style animation panel -----------------------------
-            if (hasAnimation)
-            {
-                dcad_gui_separator();
-                if (dcad_gui_begin_child("##animation", 0, 112, childFlagsBorders))
-                {
-                    int animate = animPlaying ? 1 : 0;
-                    if (dcad_gui_checkbox("Animate", &animate))
-                        animPlaying = animate != 0;
-                    dcad_gui_same_line();
-                    if (dcad_gui_button("Restart"))
-                    {
-                        animTime = 0;
-                        animPlaying = true;
-                    }
-                    dcad_gui_same_line();
-                    immutable tNorm = animTime / cycleSeconds();
-                    dcad_gui_text(("  $t = " ~ format("%.2f", tNorm)).toStringz);
-
-                    float timeF = cast(float) animTime;
-                    dcad_gui_set_next_item_width(240);
-                    if (dcad_gui_slider_float("Time", &timeF, 0,
-                                              cast(float) cycleSeconds()) != 0)
-                        animTime = timeF;
-
-                    dcad_gui_set_next_item_width(90);
-                    if (dcad_gui_input_float("FPS", &animFps, 1) != 0 && animFps < 1)
-                        animFps = 1;
-                    dcad_gui_same_line();
-                    dcad_gui_set_next_item_width(90);
-                    if (dcad_gui_input_int("Steps", &animSteps, 1) != 0 &&
-                        animSteps < 1)
-                        animSteps = 1;
-                }
-                dcad_gui_end_child();
-            }
         }
         dcad_gui_end();
 
