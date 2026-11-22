@@ -8,9 +8,11 @@
 module gui.app;
 
 import std.stdio : stderr, writeln;
-import std.file : mkdirRecurse, exists, readText, write;
-import std.path : buildPath;
-import std.string : toStringz, format;
+import std.file : mkdirRecurse, exists, readText, write, dirEntries, SpanMode, isDir;
+import std.path : buildPath, baseName, extension;
+import std.string : toStringz, format, startsWith;
+import std.algorithm.sorting : sort;
+import std.array : array;
 import std.conv : to;
 
 import bindbc.glfw;
@@ -35,6 +37,15 @@ Shape result = model.shape;
 };
 
 private enum string stateFile = ".dcad-gui-state";
+private enum float sidebarExpandedWidth = 220f;
+private enum float sidebarRailWidth = 34f;
+
+private struct FileEntry
+{
+    string name;
+    string path;
+    bool isDir;
+}
 
 void main(string[] args)
 {
@@ -70,18 +81,19 @@ void main(string[] args)
     // --- ImGui ------------------------------------------------------------
     dcad_gui_init(cast(void*) window, "#version 120");
     scope(exit) dcad_gui_shutdown();
-    dcad_gui_apply_light_theme(); // brocanth-ui "original", light variant
+    dcad_gui_apply_zed_theme(); // dark, minimal Zed-like chrome
 
     // --- Application state ------------------------------------------------
     auto editor = dcad_textedit_new();
     scope(exit) dcad_textedit_free(editor);
-    dcad_textedit_set_light_palette(editor);
+    dcad_textedit_set_zed_palette(editor);
 
     immutable workDir = buildPath(".dcad-gui-scripts");
     mkdirRecurse(workDir);
     scope(exit) { /* keep generated scripts out of the repo via gitignore */ }
 
-    auto host = new ScriptHost(workDir, repoRoot());
+    immutable root = repoRoot();
+    auto host = new ScriptHost(workDir, root);
     auto viewport = new Viewport();
     scope(exit) viewport.dispose(); // context is still current at scope exit
 
@@ -100,6 +112,67 @@ void main(string[] args)
     bool showError;
     float deflection = 1.0f;
     Shape currentShape;
+
+    // Collapsible project tree state.
+    bool sidebarOpen = true;
+    string currentFile;
+    bool[string] folderOpen = [
+        "source": true,
+        "gui": true,
+        "gui/source": true,
+        "samples": true,
+        "samples/coffee-table": true,
+        "tests": true,
+        "tools": true,
+    ];
+
+    void drawFileTree(string absDir, string relDir)
+    {
+        FileEntry[] entries;
+        foreach (entry; dirEntries(absDir, SpanMode.shallow))
+        {
+            auto name = baseName(entry.name);
+            if (name.startsWith(".") || name == "build" || name == "vendor" ||
+                name == "node_modules") continue;
+            if (!entry.isDir && extension(name).length == 0) continue;
+            entries ~= FileEntry(name, entry.name, entry.isDir);
+        }
+        sort!((a, b) => a.isDir != b.isDir ? a.isDir : a.name < b.name)(entries);
+
+        foreach (e; entries)
+        {
+            immutable key = relDir.length ? relDir ~ "/" ~ e.name : e.name;
+            if (e.isDir)
+            {
+                int open = ((key in folderOpen) !is null && folderOpen[key]) ? 1 : 0;
+                if (dcad_gui_tree_node(e.name.toStringz, &open) != 0)
+                {
+                    folderOpen[key] = true;
+                    drawFileTree(e.path, key);
+                    dcad_gui_tree_pop();
+                }
+                else
+                    folderOpen[key] = false;
+            }
+            else
+            {
+                int selected = key == currentFile ? 1 : 0;
+                if (dcad_gui_selectable(e.name.toStringz, selected) != 0)
+                {
+                    try
+                    {
+                        dcad_textedit_set_text(editor, readText(e.path).toStringz);
+                        currentFile = key;
+                        status = "Opened " ~ key;
+                    }
+                    catch (Exception)
+                    {
+                        status = "Cannot open " ~ key;
+                    }
+                }
+            }
+        }
+    }
 
     // Animation state. Parts are meshed once; each frame only updates a
     // per-part translation uniform, so playback is independent of OCCT.
@@ -175,13 +248,45 @@ void main(string[] args)
         // frame so neither pane can be dragged, resized or re-docked.
         float vw, vh;
         dcad_gui_get_viewport_size(&vw, &vh);
-        immutable editorW = vw * 0.44f;
+        immutable sidebarW = sidebarOpen ? sidebarExpandedWidth : sidebarRailWidth;
+        immutable editorW = (vw - sidebarW) * 0.44f;
+
+        // ---------------- Project sidebar ----------------
+        dcad_gui_set_next_window_pos(0, 0, condAlways);
+        dcad_gui_set_next_window_size(sidebarW, vh, condAlways);
+        if (dcad_gui_begin("Project", fixedPaneFlags))
+        {
+            if (sidebarOpen)
+            {
+                dcad_gui_text_colored("PROJECT".toStringz,
+                                      0.55f, 0.61f, 0.68f, 1);
+                dcad_gui_same_line();
+                if (dcad_gui_button("<<"))
+                    sidebarOpen = false;
+                dcad_gui_separator();
+
+                float sx, sy, sw, sh;
+                dcad_gui_get_window_pos(&sx, &sy);
+                dcad_gui_get_window_size(&sw, &sh);
+                float cx, cy;
+                dcad_gui_get_cursor_screen_pos(&cx, &cy);
+                immutable treeH = (sy + sh - 8f) - cy;
+                if (dcad_gui_begin_child("##tree", 0,
+                                         treeH > 40 ? treeH : 40,
+                                         childFlagsBorders))
+                    drawFileTree(root, "");
+                dcad_gui_end_child();
+            }
+            else if (dcad_gui_button(">>"))
+                sidebarOpen = true;
+        }
+        dcad_gui_end();
 
         // Run trigger: key chord checked globally, button in editor window.
         bool doRun = dcad_gui_key_chord_pressed(modCtrl | keyEnter) != 0;
 
         // ---------------- Editor pane ----------------
-        dcad_gui_set_next_window_pos(0, 0, condAlways);
+        dcad_gui_set_next_window_pos(sidebarW, 0, condAlways);
         dcad_gui_set_next_window_size(editorW, vh, condAlways);
         if (dcad_gui_begin("Script", fixedPaneFlags | windowFlagsMenuBar))
         {
@@ -212,6 +317,9 @@ void main(string[] args)
                     status = "STEP export failed";
             }
 
+            dcad_gui_text_colored(
+                (currentFile.length ? currentFile : "untitled").toStringz,
+                0.55f, 0.61f, 0.68f, 1);
             dcad_gui_separator();
 
             // Editor takes whatever is left after the controls below it, so
@@ -227,18 +335,20 @@ void main(string[] args)
             immutable editorH = available > 80 ? available : 80;
             dcad_textedit_render(editor, "##script", ww - 24, editorH);
 
-            if (dcad_gui_button("Save script"))
+            if (dcad_gui_button("Save"))
             {
                 import std.string : fromStringz;
-                write(stateFile, fromStringz(dcad_textedit_get_text(editor)).idup);
-                status = "Saved " ~ stateFile;
+                immutable target = currentFile.length
+                    ? buildPath(root, currentFile) : stateFile;
+                write(target, fromStringz(dcad_textedit_get_text(editor)).idup);
+                status = "Saved " ~ target;
             }
 
-            dcad_gui_text_colored(status.toStringz, 0.05f, 0.45f, 0.20f, 1);
+            dcad_gui_text_colored(status.toStringz, 0.49f, 0.91f, 0.58f, 1);
 
             if (showError && lastError.length)
             {
-                dcad_gui_text_colored("ERROR:".toStringz, 0.75f, 0.15f, 0.15f, 1);
+                dcad_gui_text_colored("ERROR:".toStringz, 1f, 0.42f, 0.42f, 1);
                 float errX, errY;
                 dcad_gui_get_cursor_screen_pos(&errX, &errY);
                 immutable errRoom = (wy + wh - 8f) - errY;
@@ -256,8 +366,8 @@ void main(string[] args)
             doRunScript();
 
         // ---------------- Viewport pane ----------------
-        dcad_gui_set_next_window_pos(editorW, 0, condAlways);
-        dcad_gui_set_next_window_size(vw - editorW, vh, condAlways);
+        dcad_gui_set_next_window_pos(sidebarW + editorW, 0, condAlways);
+        dcad_gui_set_next_window_size(vw - sidebarW - editorW, vh, condAlways);
         if (dcad_gui_begin("3D Viewport", viewportPaneFlags))
         {
             float x, y, w, h;

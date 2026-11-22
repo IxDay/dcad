@@ -67,9 +67,10 @@ Selectors are enums: `.faces(">Z")` from CadQuery becomes
 
 ## GUI
 
-[`gui/`](gui/) is a native two-pane editor + live 3D preview built on GLFW,
-the ImGui docking branch, raw OpenGL and `ImGuiColorTextEdit`. Scripts are D
-source compiled to a hot-loaded shared library on each Run. See
+[`gui/`](gui/) is a native three-pane IDE-style shell with a collapsible project
+tree, D script editor, and live 3D preview, built on GLFW, the ImGui docking
+branch, raw OpenGL and `ImGuiColorTextEdit`. Scripts are D source compiled to a
+hot-loaded shared library on each Run. See
 [`gui/README.md`](gui/README.md) for controls and the execution-model tradeoff.
 
 ## Samples

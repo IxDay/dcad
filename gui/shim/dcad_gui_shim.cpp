@@ -133,6 +133,92 @@ extern "C" void dcad_gui_apply_light_theme(void)
     c[ImGuiCol_ModalWindowDimBg]       = broc(0x1a1b25, 0.35f);
 }
 
+/* --------------------------------------------------------------------------
+ * Zed-like dark theme: near-black panes, cool grey chrome, blue-violet accent,
+ * small radii and tight spacing.
+ * -------------------------------------------------------------------------- */
+
+extern "C" void dcad_gui_apply_zed_theme(void)
+{
+    ImGui::StyleColorsDark();
+    ImGuiStyle& s = ImGui::GetStyle();
+
+    s.WindowRounding = 8.0f;
+    s.ChildRounding = 6.0f;
+    s.PopupRounding = 6.0f;
+    s.FrameRounding = 5.0f;
+    s.ScrollbarRounding = 5.0f;
+    s.GrabRounding = 4.0f;
+    s.TabRounding = 5.0f;
+
+    s.WindowPadding = ImVec2(10, 8);
+    s.FramePadding = ImVec2(8, 5);
+    s.ItemSpacing = ImVec2(6, 4);
+    s.ItemInnerSpacing = ImVec2(5, 3);
+    s.IndentSpacing = 14.0f;
+    s.ScrollbarSize = 10.0f;
+    s.GrabMinSize = 10.0f;
+    s.WindowBorderSize = 1.0f;
+    s.FrameBorderSize = 0.0f;
+    s.PopupBorderSize = 1.0f;
+
+    ImVec4* c = s.Colors;
+    c[ImGuiCol_Text]                   = broc(0xd6dade);
+    c[ImGuiCol_TextDisabled]           = broc(0x7d858d);
+    c[ImGuiCol_WindowBg]               = broc(0x1b1d1f);
+    c[ImGuiCol_ChildBg]                = broc(0x202325);
+    c[ImGuiCol_PopupBg]                = broc(0x25292d);
+    c[ImGuiCol_Border]                 = broc(0x30363c);
+    c[ImGuiCol_BorderShadow]           = broc(0x000000, 0.2f);
+    c[ImGuiCol_FrameBg]                = broc(0x25292d);
+    c[ImGuiCol_FrameBgHovered]         = broc(0x30363c);
+    c[ImGuiCol_FrameBgActive]          = broc(0x3a424a);
+    c[ImGuiCol_TitleBg]                = broc(0x202325);
+    c[ImGuiCol_TitleBgActive]          = broc(0x25292d);
+    c[ImGuiCol_TitleBgCollapsed]       = broc(0x202325);
+    c[ImGuiCol_MenuBarBg]              = broc(0x202325);
+    c[ImGuiCol_ScrollbarBg]            = broc(0x202325);
+    c[ImGuiCol_ScrollbarGrab]          = broc(0x3a424a);
+    c[ImGuiCol_ScrollbarGrabHovered]   = broc(0x4a5560);
+    c[ImGuiCol_ScrollbarGrabActive]    = broc(0x5c6bc0);
+    c[ImGuiCol_CheckMark]              = broc(0x8b9bff);
+    c[ImGuiCol_SliderGrab]             = broc(0x8b9bff);
+    c[ImGuiCol_SliderGrabActive]       = broc(0xa5b2ff);
+    c[ImGuiCol_Button]                 = broc(0x343b42);
+    c[ImGuiCol_ButtonHovered]          = broc(0x414a53);
+    c[ImGuiCol_ButtonActive]           = broc(0x4d5863);
+    c[ImGuiCol_Header]                 = broc(0x2b3137);
+    c[ImGuiCol_HeaderHovered]          = broc(0x353d45);
+    c[ImGuiCol_HeaderActive]           = broc(0x465263);
+    c[ImGuiCol_Separator]              = broc(0x30363c);
+    c[ImGuiCol_SeparatorHovered]       = broc(0x8b9bff);
+    c[ImGuiCol_SeparatorActive]        = broc(0xa5b2ff);
+    c[ImGuiCol_ResizeGrip]             = broc(0x3a424a);
+    c[ImGuiCol_ResizeGripHovered]      = broc(0x8b9bff);
+    c[ImGuiCol_ResizeGripActive]       = broc(0xa5b2ff);
+    c[ImGuiCol_Tab]                    = broc(0x25292d);
+    c[ImGuiCol_TabHovered]             = broc(0x353d45);
+    c[ImGuiCol_TabSelected]            = broc(0x343b42);
+    c[ImGuiCol_TabSelectedOverline]    = broc(0x8b9bff);
+    c[ImGuiCol_TabDimmed]              = broc(0x202325);
+    c[ImGuiCol_TabDimmedSelected]      = broc(0x2b3137);
+    c[ImGuiCol_DockingPreview]         = broc(0x8b9bff, 0.5f);
+    c[ImGuiCol_DockingEmptyBg]         = broc(0x1b1d1f);
+    c[ImGuiCol_TableHeaderBg]          = broc(0x25292d);
+    c[ImGuiCol_TableBorderStrong]      = broc(0x30363c);
+    c[ImGuiCol_TableBorderLight]       = broc(0x272c30);
+    c[ImGuiCol_TableRowBg]             = broc(0x1b1d1f);
+    c[ImGuiCol_TableRowBgAlt]          = broc(0x202325);
+    c[ImGuiCol_TextSelectedBg]         = broc(0x4c6ef5, 0.35f);
+    c[ImGuiCol_DragDropTarget]         = broc(0x8b9bff);
+    c[ImGuiCol_NavCursor]              = broc(0x8b9bff);
+    c[ImGuiCol_TextLink]               = broc(0x8b9bff);
+    c[ImGuiCol_TreeLines]              = broc(0x30363c);
+    c[ImGuiCol_NavWindowingHighlight]  = broc(0x8b9bff, 0.7f);
+    c[ImGuiCol_NavWindowingDimBg]      = broc(0x000000, 0.4f);
+    c[ImGuiCol_ModalWindowDimBg]       = broc(0x000000, 0.5f);
+}
+
 extern "C" void dcad_gui_shutdown(void)
 {
     ImGui_ImplOpenGL3_Shutdown();
@@ -251,6 +337,21 @@ extern "C" int dcad_gui_menu_item(const char* label, const char* shortcut, int s
     return ImGui::MenuItem(label, shortcut, selected != 0, enabled != 0) ? 1 : 0;
 }
 
+extern "C" int dcad_gui_tree_node(const char* label, int* open)
+{
+    ImGui::SetNextItemOpen(*open != 0, ImGuiCond_Always);
+    bool isOpen = ImGui::TreeNodeEx(label,
+        ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth,
+        "%s", label);
+    *open = isOpen ? 1 : 0;
+    return isOpen ? 1 : 0;
+}
+extern "C" void dcad_gui_tree_pop(void) { ImGui::TreePop(); }
+extern "C" int dcad_gui_selectable(const char* label, int selected)
+{
+    return ImGui::Selectable(label, selected != 0) ? 1 : 0;
+}
+
 extern "C" int dcad_gui_slider_float(const char* label, float* v, float vmin, float vmax)
 {
     return ImGui::SliderFloat(label, v, vmin, vmax) ? 1 : 0;
@@ -339,6 +440,38 @@ extern "C" void dcad_textedit_set_light_palette(void* ed)
     set(PI::CurrentLineFill,   0xf6f8fa, 0x80);
     set(PI::CurrentLineFillInactive, 0xf6f8fa, 0x40);
     set(PI::CurrentLineEdge,   0xd5dbe1, 0x80);
+    static_cast<TextEditor*>(ed)->SetPalette(p);
+}
+
+extern "C" void dcad_textedit_set_zed_palette(void* ed)
+{
+    using PI = TextEditor::PaletteIndex;
+    auto p = TextEditor::GetDarkPalette();
+    auto set = [&p](PI i, unsigned int rgb, unsigned int a = 0xff) {
+        p[static_cast<size_t>(i)] =
+            IM_COL32((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff, a);
+    };
+    set(PI::Default,           0xd6dade);
+    set(PI::Keyword,           0x82aaff);
+    set(PI::Number,            0xf78c6b);
+    set(PI::String,            0xc3e88d);
+    set(PI::CharLiteral,       0xc3e88d);
+    set(PI::Punctuation,       0x9aa3ab);
+    set(PI::Preprocessor,      0x82aaff);
+    set(PI::Identifier,        0xd6dade);
+    set(PI::KnownIdentifier,   0x8b9bff);
+    set(PI::PreprocIdentifier, 0xc792ea);
+    set(PI::Comment,           0x6c7680);
+    set(PI::MultiLineComment,  0x6c7680);
+    set(PI::Background,        0x1b1d1f);
+    set(PI::Cursor,            0x8b9bff);
+    set(PI::Selection,         0x4c6ef5, 0x45);
+    set(PI::ErrorMarker,       0xff6b6b, 0xa0);
+    set(PI::Breakpoint,        0xf5b97a, 0x80);
+    set(PI::LineNumber,        0x5f6973);
+    set(PI::CurrentLineFill,   0x25292d, 0x80);
+    set(PI::CurrentLineFillInactive, 0x25292d, 0x40);
+    set(PI::CurrentLineEdge,   0x343b42, 0x80);
     static_cast<TextEditor*>(ed)->SetPalette(p);
 }
 

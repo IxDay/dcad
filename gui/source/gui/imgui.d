@@ -56,6 +56,7 @@ extern(C) nothrow @nogc
     // lifecycle
     void dcad_gui_init(void* window, const(char)* glslVersion);
     void dcad_gui_apply_light_theme();
+    void dcad_gui_apply_zed_theme();
     void dcad_gui_shutdown();
     void dcad_gui_new_frame();
     void dcad_gui_render();
@@ -95,6 +96,9 @@ extern(C) nothrow @nogc
                             int selected, int enabled);
     int  dcad_gui_slider_float(const(char)* label, float* v,
                                float vmin, float vmax);
+    int  dcad_gui_tree_node(const(char)* label, int* open);
+    void dcad_gui_tree_pop();
+    int  dcad_gui_selectable(const(char)* label, int selected);
     int  dcad_gui_checkbox(const(char)* label, int* v);
     int  dcad_gui_input_float(const(char)* label, float* v, float step);
     int  dcad_gui_input_int(const(char)* label, int* v, int step);
@@ -112,6 +116,7 @@ extern(C) nothrow @nogc
     void*       dcad_textedit_new();
     void        dcad_textedit_free(void* ed);
     void        dcad_textedit_set_light_palette(void* ed);
+    void        dcad_textedit_set_zed_palette(void* ed);
     void        dcad_textedit_set_text(void* ed, const(char)* text);
     const(char)* dcad_textedit_get_text(void* ed);
     void        dcad_textedit_render(void* ed, const(char)* title, float w, float h);

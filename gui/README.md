@@ -1,7 +1,8 @@
 # dcad-gui
 
-Native two-pane GUI shell around the dcad kernel: a D script editor on the
-left, a live OpenGL preview of the resulting OCCT shape on the right.
+Native three-pane GUI shell around the dcad kernel: a collapsible project tree
+on the left, a D script editor in the middle, and a live OpenGL preview of the
+resulting OCCT shape on the right.
 
 ## Run
 
@@ -10,10 +11,16 @@ brew install glfw                     # one-time, macOS
 dub run :gui
 ```
 
-The window opens with a default script already loaded and rendered, in a light
-theme adapted from [brocanth-ui](https://github.com/DHHwasRight/brocanth-ui)
-(purple `#625afa` brand, cool greys, tight radii, 32px controls). Edit the
-script, press **Cmd/Ctrl+Enter** (or click **Run**) to recompile and re-mesh.
+The window opens with a default script already loaded and rendered in a dark,
+minimal Zed-like theme (near-black panes, cool grey chrome, blue-violet accent,
+tight spacing). Edit the script, press **Cmd/Ctrl+Enter** (or click **Run**) to
+recompile and re-mesh.
+
+The left sidebar shows the repository file tree. Click a disclosure arrow to
+expand or collapse folders, and click a file to load it into the editor. Use
+`<<` to collapse the sidebar to a rail and `>>` to expand it again. The
+coffee-table sample and its animation are available under `samples` for a quick
+demo.
 
 ## Controls
 
@@ -26,14 +33,16 @@ script, press **Cmd/Ctrl+Enter** (or click **Run**) to recompile and re-mesh.
 | Standard view | `Fit`, `Iso`, `Top`, `Bottom`, `Front`, `Back`, `Right`, `Left` |
 | Display toggles | `Axes`, `Grid`, `Wireframe`, `Ortho` checkboxes |
 | Export STEP | `Export STEP` button → writes `dcad-export.step` |
-| Save script | `Save script` button → writes `.dcad-gui-state` |
+| Save script | `Save` button → writes the open file, or `.dcad-gui-state` |
+| Project tree | Expand/collapse folders; click a file to open it; `<<` / `>>` collapse rail |
 | Animate | `Animate` checkbox, `Restart`, `Time`, `FPS`, `Steps` (animated scripts only) |
 
-The two panes use a fixed 44% / 56% split: they cannot be dragged, resized or
-re-docked, and neither has a title header. Both the UI chrome and the 3D render
-use the light brocanth palette. Each pane sizes its main area to the space that
-remains; the editor pane keeps scrollbars enabled for long scripts or errors,
-while the preview pane never scrolls.
+The sidebar, editor, and preview panes use a fixed 220px / 44% / 56% split: they
+cannot be dragged, resized or re-docked, and none has a title header. The
+sidebar collapses to a 34px rail. Both the UI chrome and the 3D render use the
+dark Zed-like palette. Each pane sizes its main area to the space that remains;
+the editor and sidebar keep scrollbars enabled for long content, while the
+preview pane never scrolls.
 
 ### Preview toolbar
 

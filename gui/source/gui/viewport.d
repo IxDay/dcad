@@ -115,8 +115,8 @@ void main()
     vec3 n = normalize(vNormal);
     vec3 light = normalize(vec3(0.4, 0.7, 1.0));
     float diff = max(dot(n, light), 0.0);
-    // Brocanth primary #625afa, kept dark enough to read on the light pane.
-    vec3 base = vec3(0.384, 0.353, 0.980);
+    // Zed-like blue-violet, bright enough to read on the dark pane.
+    vec3 base = vec3(0.54, 0.59, 1.0);
     vec3 col = base * (0.55 + 0.45 * diff);
     gl_FragColor = vec4(col, 1.0);
 }
@@ -362,7 +362,7 @@ private:
         immutable cy = mesh.center[1];
         immutable z = baseZ - 0.5f;
         immutable ext = mesh.radius * 2.2f;
-        float[3] grey = [0.82f, 0.85f, 0.89f];
+        float[3] grey = [0.22f, 0.25f, 0.29f];
         foreach (i; 0 .. 11)
         {
             immutable f = -ext + 2 * ext * i / 10.0f;
@@ -463,8 +463,8 @@ public:
         }
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         glViewport(0, 0, width, height);
-        // Brocanth muted grey #f6f8fa -- same light palette as the UI chrome.
-        glClearColor(0.965f, 0.973f, 0.980f, 1);
+        // Zed near-black canvas (#1b1d1f) to match the chrome.
+        glClearColor(0.106f, 0.114f, 0.122f, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
 
