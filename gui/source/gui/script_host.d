@@ -16,9 +16,11 @@
 module gui.script_host;
 
 import std.stdio : File;
-import std.file : write, remove, exists;
+import std.file : write, remove, exists, dirEntries, SpanMode;
 import std.path : buildPath;
 import std.process : execute;
+import std.regex : ctRegex, matchFirst, replaceFirst;
+import std.algorithm.sorting : sort;
 import std.string : replace, toStringz, fromStringz;
 import std.conv : to;
 import core.sys.posix.dlfcn;
@@ -67,10 +69,12 @@ private string partLabel(T)(ref T part) {
         return "part";
 }
 
-/* Optional animation protocol. A script opts in by defining, inside its own
- * source (which is injected into dcad_script_run), these two locals:
- *   auto animParts = <array of NamedPart-like values with .id and .shape>;
- *   auto animPoses = <array of double[3][string] keyframes>; // t in [0,1]
+/* Optional animation protocol. A body-style script defines two locals; a
+ * module-style script exposes two functions with the same values:
+ *   <array of NamedPart-like values with .id and .shape>;
+ *   <array of double[3][string] keyframes>; // t in [0,1]
+ * Functions rather than module variables: D tries to evaluate module-level
+ * initialisers at compile time, which cannot work for OCCT calls.
  *
  * The data is copied into malloc'd buffers, NOT GC-managed plugin globals:
  * the plugin's static data is not necessarily a GC root for the host's
@@ -84,57 +88,60 @@ private double* g_poseData;
 private size_t g_poseFrames;
 private size_t g_poseParts;
 
+private void captureAnimation(Parts, Poses)(Parts parts, Poses poses)
+{
+    immutable np = parts.length;
+    immutable nf = poses.length;
+    g_animShapeCount = np;
+    g_poseFrames = nf;
+    g_poseParts = np;
+    if (np > 0)
+    {
+        g_animShapePtrs = cast(void**) malloc(np * size_t.sizeof);
+        g_animNames = cast(char**) malloc(np * size_t.sizeof);
+    }
+    if (nf > 0 && np > 0)
+    {
+        g_poseData = cast(double*) malloc(nf * np * 3 * double.sizeof);
+        if (g_poseData !is null)
+            foreach (k; 0 .. nf * np * 3)
+                g_poseData[k] = 0.0;
+    }
+    foreach (i, p; parts)
+    {
+        auto s = toShape(p.shape);
+        if (g_animShapePtrs !is null)
+            g_animShapePtrs[i] = dcad_shape_clone(&s.native());
+        if (g_animNames !is null)
+        {
+            auto label = partLabel(p);
+            auto name = cast(char*) malloc(label.length + 1);
+            if (name !is null)
+            {
+                memcpy(name, label.ptr, label.length);
+                name[label.length] = 0;
+            }
+            g_animNames[i] = name;
+        }
+        if (g_poseData !is null)
+            foreach (fi, pose; poses)
+                if (auto v = p.id in pose)
+                    foreach (k; 0 .. 3)
+                        g_poseData[(fi * np + i) * 3 + k] = (*v)[k];
+    }
+}
+
 extern(C) export void* dcad_script_run()
 {
     try
     {
 PRELUDE_END";
 
-private enum string epilogue = q"EPILOGUE_END
-        // Capture optional animation hooks while the script's locals are in
-        // scope (the generated source is inserted inside this function).
+// Body-style scripts inject their source here; the epilogue captures their
+// locals while they are still in scope.
+private enum string bodyEnd = q"BODY_END
         static if (is(typeof(animParts)) && is(typeof(animPoses)))
-        {
-            immutable np = animParts.length;
-            immutable nf = animPoses.length;
-            g_animShapeCount = np;
-            g_poseFrames = nf;
-            g_poseParts = np;
-            if (np > 0)
-            {
-                g_animShapePtrs = cast(void**) malloc(np * size_t.sizeof);
-                g_animNames = cast(char**) malloc(np * size_t.sizeof);
-            }
-            if (nf > 0 && np > 0)
-            {
-                g_poseData = cast(double*) malloc(nf * np * 3 * double.sizeof);
-                if (g_poseData !is null)
-                    foreach (k; 0 .. nf * np * 3)
-                        g_poseData[k] = 0.0;
-            }
-            foreach (i, p; animParts)
-            {
-                auto s = toShape(p.shape);
-                if (g_animShapePtrs !is null)
-                    g_animShapePtrs[i] = dcad_shape_clone(&s.native());
-                if (g_animNames !is null)
-                {
-                    auto label = partLabel(p);
-                    auto name = cast(char*) malloc(label.length + 1);
-                    if (name !is null)
-                    {
-                        memcpy(name, label.ptr, label.length);
-                        name[label.length] = 0;
-                    }
-                    g_animNames[i] = name;
-                }
-                if (g_poseData !is null)
-                    foreach (fi, pose; animPoses)
-                        if (auto v = p.id in pose)
-                            foreach (k; 0 .. 3)
-                                g_poseData[(fi * np + i) * 3 + k] = (*v)[k];
-            }
-        }
+            captureAnimation(animParts, animPoses);
 
         Shape finalShape = toShape(result);
         return cast(void*) dcad_shape_clone(&finalShape.native());
@@ -145,6 +152,36 @@ private enum string epilogue = q"EPILOGUE_END
         return null;
     }
 }
+BODY_END";
+
+// Module-style scripts are compiled as their own translation unit. The entry
+// point is dcadMain(); per-element modules only need build() and are displayed
+// directly when opened from the project tree. Both forms share the same ABI.
+private string moduleBodyEnd(string modName)
+{
+    return "        import " ~ modName ~ ";\n" ~ q"MOD_BODY_END
+        static if (__traits(compiles, dcadParts()) && __traits(compiles, dcadPoses()))
+            captureAnimation(dcadParts(), dcadPoses());
+
+        Shape finalShape;
+        static if (__traits(compiles, dcadMain()))
+            finalShape = toShape(dcadMain());
+        else static if (__traits(compiles, build()))
+            finalShape = toShape(build());
+        else
+            static assert(0, "Module script must expose Shape dcadMain() or Shape build()");
+        return cast(void*) dcad_shape_clone(&finalShape.native());
+    }
+    catch (Throwable t)
+    {
+        setError(t.toString());
+        return null;
+    }
+}
+MOD_BODY_END";
+}
+
+private enum string tail = q"TAIL_END
 
 extern(C) export const(char)* dcad_script_error()
 {
@@ -210,7 +247,22 @@ extern(C) export void dcad_anim_free()
     g_poseFrames = 0;
     g_poseParts = 0;
 }
-EPILOGUE_END";
+TAIL_END";
+
+private enum moduleDecl = ctRegex!`(?m)^\s*module\s+[\w.]+\s*;`;
+
+/// A source with a module declaration is a real D module rather than a body.
+private bool isModuleSource(string source)
+{
+    return !matchFirst(source, moduleDecl).empty;
+}
+
+/// Give the editor module a private name so it can be compiled alongside the
+/// registered element modules without colliding with their declared names.
+private string asModule(string source, string modName)
+{
+    return replaceFirst(source, moduleDecl, "module " ~ modName ~ ";");
+}
 
 /// Result of a script run: either a shape or an error message.
 struct RunResult
@@ -247,6 +299,19 @@ public:
             buildPath(sampleDir, "coffee_parts.d"),
             buildPath(sampleDir, "coffee_motion.d"),
         ];
+        // One module per element: samples/parts/*.d is always part of the
+        // plugin, so an assembly script can import any of them by name and a
+        // single element file can be run directly from the project tree.
+        immutable partsDir = buildPath(repoRoot, "samples/parts");
+        if (exists(partsDir))
+        {
+            importPaths ~= buildPath(repoRoot, "samples");
+            string[] elements;
+            foreach (entry; dirEntries(partsDir, "*.d", SpanMode.shallow))
+                elements ~= entry.name;
+            elements.sort();
+            extraSources ~= elements;
+        }
         buildLinkArgs();
     }
 
@@ -266,8 +331,29 @@ public:
         immutable srcPath = buildPath(workDir, stem ~ ".d");
         immutable dylibPath = buildPath(workDir, stem ~ ".dylib");
 
-        write(srcPath, prelude ~ "\n" ~ source ~ "\n" ~ epilogue ~ "\n");
-        scope(exit) { if (exists(srcPath)) remove(srcPath); }
+        // Two script forms share one plugin ABI:
+        //  * body form (legacy): editor text is the body of dcad_script_run;
+        //  * module form: editor text is a real D module exposing dcadMain()
+        //    or build(). It gets its own translation unit plus a generated
+        //    wrapper, so an element file can be run directly without a
+        //    separate viewer script.
+        immutable moduleForm = isModuleSource(source);
+        string modSrcPath;
+        string modName;
+        if (moduleForm)
+        {
+            modName = stem ~ "_mod";
+            modSrcPath = buildPath(workDir, modName ~ ".d");
+            write(modSrcPath, asModule(source, modName));
+        }
+        write(srcPath, prelude ~ "\n"
+              ~ (moduleForm ? moduleBodyEnd(modName) : source ~ "\n" ~ bodyEnd)
+              ~ tail ~ "\n");
+        scope(exit)
+        {
+            if (exists(srcPath)) remove(srcPath);
+            if (modSrcPath.length && exists(modSrcPath)) remove(modSrcPath);
+        }
 
         string[] cmd = ["ldc2", "-shared", "-relocation-model=pic",
                         "-I", buildPath(repoRoot, "source")];
@@ -275,6 +361,8 @@ public:
             cmd ~= ["-I", p];
         cmd ~= linkArgs;
         cmd ~= extraSources;
+        if (modSrcPath.length)
+            cmd ~= modSrcPath;
         cmd ~= [srcPath, "-of=" ~ dylibPath];
 
         auto compiled = execute(cmd);

@@ -25,9 +25,10 @@ The left sidebar shows the repository file tree with the exact file icons VS Cod
 uses (its built-in Seti icon theme, extracted to PNGs). Click a disclosure arrow
 to expand or collapse folders, and click a file to load it into the editor. The
 sidebar is always visible. The coffee-table sample and its animation are
-available under `samples` for a quick demo; when an animated script is loaded,
-its parts are listed as a transparent overlay in the top-right of the preview and
-hovering a part highlights it in the render.
+available under `samples` for a quick demo; each element also has its own module
+under `samples/parts/`, which you can open and Run to preview that element alone.
+When an animated script is loaded, its parts are listed as a transparent overlay
+in the top-right of the preview and hovering a part highlights it in the render.
 
 ## Controls
 
@@ -73,7 +74,8 @@ pauses playback, **Time** scrubs through the cycle in seconds, and one cycle
 takes `Steps / FPS` seconds. `$t` is the normalised position (0 → 1) passed to
 the script's keyframe sampler.
 
-A script opts into playback by defining two extra locals alongside `result`:
+A body-style script opts into playback with two extra locals alongside `result`;
+a module-style script exposes them as `dcadParts()` / `dcadPoses()` functions:
 
 ```d
 auto animParts = parts;            // .id + .shape for each moving part
@@ -89,10 +91,15 @@ the full script, and `coffee_motion.allPoses()` for the knock-down keyframes.
 
 ## Script contract
 
-The editor holds **D source**. The GUI wraps it in a generated module and
-compiles it to a shared library with `ldc2`, then loads it with `dlopen`. The
-script must define a local variable named `result`, of type `Shape` or
-`Workplane`:
+The editor holds **D source**. On Run the GUI compiles it to a shared library
+with `ldc2`, loads it with `dlopen`, and calls a single exported entry point.
+There are two source forms, both producing the same shape/mesh and using the
+same animation overlay.
+
+### Body-style scripts
+
+The editor text is inserted into a generated `dcad_script_run()` function, so it
+must define a local named `result`, of type `Shape` or `Workplane`:
 
 ```d
 auto model = Workplane.create()
@@ -104,11 +111,48 @@ auto model = Workplane.create()
 Shape result = model.shape;
 ```
 
-Common kernel modules (`Shape`, `Workplane`, selectors, `std.math`, `std.array`,
-`std.algorithm`, …) are imported by the wrapper. A compile error in the script
-or a geometry exception from OCCT is captured and shown inline in the editor;
-the viewport mesh is cleared so a stale render is never mistaken for a
-successful build.
+An animated script also defines `animParts` and `animPoses` locals (see
+[Animation](#animation)). `scripts/default.d` and
+`scripts/coffee-table-animation.d` use this form, and the wrapper imports common
+kernel modules (`Shape`, `Workplane`, selectors, `std.math`, `std.array`,
+`std.algorithm`, …) for it.
+
+### Module-style scripts
+
+A source with a `module` declaration is compiled as its own translation unit.
+The host imports it and calls `dcadMain()` — or `build()` for a single element —
+so there is no injected function body and no `result` local:
+
+```d
+module module_assembly;
+import dcad.shape : Shape;
+
+Shape dcadMain() { /* ... */ return shape; }
+
+// Optional animation hooks; the keyframes may come from an imported file.
+NamedPart[] dcadParts() { return tableParts(); }
+double[3][string][] dcadPoses() { return allPoses(); }
+```
+
+Use functions rather than module variables for the hooks: D tries to evaluate
+module-level initialisers at compile time, and OCCT calls have no CTFE source.
+See [`scripts/module-assembly.d`](scripts/module-assembly.d).
+
+### One file per element
+
+Modules under `samples/parts/` export `Shape build()` and are always compiled
+into the plugin. Open `samples/parts/leg.d` from the project tree and press Run:
+the host displays that leg alone, with no separate viewer script. An assembly
+script imports only the elements it needs:
+
+```d
+import parts.leg : leg = build;
+Shape result = leg();
+```
+
+A compile error in either form, or a geometry exception from OCCT, is captured
+and shown inline in the editor; the viewport mesh is cleared so a stale render
+is never mistaken for a successful build.
 
 ### Why hot-loaded shared libraries?
 
@@ -124,8 +168,9 @@ shape pointers cross the plugin boundary safely on macOS/ARM64 with LDC 1.43
 
 ```
 gui/source/gui/app.d           GLFW window, ImGui frame, two panes, main loop
-gui/source/gui/script_host.d   compile + dlopen + error capture (script execution)
+gui/source/gui/script_host.d   compile + dlopen + both script forms + error capture
 gui/source/gui/viewport.d      FBO render-to-texture, VBO mesh, camera, shading
+samples/parts/                 one runnable module per coffee-table element
 gui/source/gui/imgui.d         extern(C) declarations for the C++ shim
 gui/shim/dcad_gui_shim.cpp     ImGui + backends + TextEditor + OCCT mesher wrappers
 gui/vendor/                    vendored ImGui (docking) + ImGuiColorTextEdit

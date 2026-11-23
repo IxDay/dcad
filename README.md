@@ -73,8 +73,10 @@ built on GLFW, the ImGui docking branch, raw OpenGL and `ImGuiColorTextEdit`.
 Icons are extracted from VS Code's own Seti and codicon assets, and the UI uses
 your VS Code Base16 Default Light palette with an OpenSCAD-style renderer. The workspace
 recommends `webfreak.code-d` for D LSP support in VS Code. Scripts are D source
-compiled to a hot-loaded shared library on each Run. See
-[`gui/README.md`](gui/README.md) for controls and the execution-model tradeoff.
+compiled to a hot-loaded shared library on each Run; both legacy script bodies
+and module-style scripts are supported, including one runnable module per
+element under `samples/parts/`. See [`gui/README.md`](gui/README.md) for controls
+and the execution-model tradeoff.
 
 ## Samples
 

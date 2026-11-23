@@ -81,3 +81,15 @@ subPackage {
     lflags "-framework" "OpenGL" platform="osx"
     extraDependencyFiles "gui/shim/dcad_gui_shim.cpp" "gui/tools/build-gui-shim.sh"
 }
+
+# Exercises the script host's body-style and module-style forms headlessly.
+subPackage {
+    name "script-host-smoke"
+    targetType "executable"
+    targetName "dcad-script-host-smoke"
+    sourcePaths "gui/source" "tests/script-host-smoke"
+    excludedSourceFiles "gui/source/gui/app.d" "gui/source/gui/viewport.d"
+    mainSourceFile "tests/script-host-smoke/main.d"
+    importPaths "gui/source" "source"
+    dependency "dcad" version="*"
+}
