@@ -7,15 +7,18 @@
 module script_host_smoke;
 
 import std.stdio : writeln, stderr;
-import std.file : readText, mkdirRecurse, getcwd;
+import std.file : readText, mkdirRecurse, getcwd, tempDir;
 import std.path : buildPath;
+import std.conv : to;
+import core.sys.posix.unistd : getpid;
 
 import gui.script_host : ScriptHost;
 
 int main()
 {
     immutable root = getcwd();
-    immutable workDir = buildPath(root, ".dcad-gui-scripts");
+    immutable workDir = buildPath(tempDir(), "dcad-script-host-smoke-"
+                                  ~ getpid.to!string);
     mkdirRecurse(workDir);
     auto host = new ScriptHost(workDir, root);
 

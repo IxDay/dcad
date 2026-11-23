@@ -330,6 +330,7 @@ public:
         generation++;
         immutable srcPath = buildPath(workDir, stem ~ ".d");
         immutable dylibPath = buildPath(workDir, stem ~ ".dylib");
+        immutable objPath = buildPath(workDir, stem ~ ".o");
 
         // Two script forms share one plugin ABI:
         //  * body form (legacy): editor text is the body of dcad_script_run;
@@ -349,10 +350,14 @@ public:
         write(srcPath, prelude ~ "\n"
               ~ (moduleForm ? moduleBodyEnd(modName) : source ~ "\n" ~ bodyEnd)
               ~ tail ~ "\n");
+        // Nothing generated is kept: the mapping survives unlinking on macOS,
+        // and dlclose() only needs the loaded handle, not the path.
         scope(exit)
         {
             if (exists(srcPath)) remove(srcPath);
             if (modSrcPath.length && exists(modSrcPath)) remove(modSrcPath);
+            if (exists(objPath)) remove(objPath);
+            if (exists(dylibPath)) remove(dylibPath);
         }
 
         string[] cmd = ["ldc2", "-shared", "-relocation-model=pic",

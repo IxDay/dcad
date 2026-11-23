@@ -12,8 +12,8 @@ brew install glfw                     # one-time, macOS
 dub run :gui
 ```
 
-The window opens with a default script already loaded and rendered in your
-VS Code **Base16 Default Light** palette (`#f8f8f8` editor, `#f9f9f9` sidebar,
+The window opens the real tracked file `gui/scripts/default.d` and renders it
+in your VS Code **Base16 Default Light** palette (`#f8f8f8` editor, `#f9f9f9` sidebar,
 `#383838` text, `#7cafc2` accents). The code editor uses D-aware syntax colours
 from the same theme, with D keywords and `@attribute` highlighting. The 3D
 preview uses an OpenSCAD-style renderer: near-white background, neutral
@@ -40,7 +40,7 @@ in the top-right of the preview and hovering a part highlights it in the render.
 | Zoom | Scroll over the viewport |
 | Standard view | Icon buttons: fit, iso, up, down, front/back, left/right, reset |
 | Display toggles | Icon buttons with check marks: axes, grid, wireframe, orthographic |
-| Save script | Save icon → writes the open file, or `.dcad-gui-state` |
+| Save script | Save icon → writes the open script file |
 | Project tree | Expand/collapse folders; click a file to open it |
 | Parts list | Hover a part in the preview's top-right overlay to highlight it |
 | Animate | Play/pause and restart icons, `Time`, `FPS`, `Steps` (animated scripts only) |

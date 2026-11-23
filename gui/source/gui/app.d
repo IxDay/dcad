@@ -8,12 +8,13 @@
 module gui.app;
 
 import std.stdio : stderr, writeln;
-import std.file : mkdirRecurse, exists, readText, write, dirEntries, SpanMode, isDir;
+import std.file : mkdirRecurse, exists, readText, write, dirEntries, SpanMode, isDir, tempDir;
 import std.path : buildPath, baseName, extension;
 import std.string : toStringz, format, startsWith;
 import std.algorithm.sorting : sort;
 import std.array : array;
 import std.conv : to;
+import core.sys.posix.unistd : getpid;
 
 import bindbc.glfw;
 import bindbc.opengl;
@@ -24,17 +25,8 @@ import gui.script_host : ScriptHost, RunResult;
 
 import dcad.shape : Shape;
 
-private enum string defaultScript = q{// dcad script -- must end with `result` (a Shape or Workplane).
-auto model = Workplane.create()
-    .box(60, 40, 20)
-    .faces(FaceSelector.top)
-    .circle(8)
-    .cutThruAll();
-
-Shape result = model.shape;
-};
-
-private enum string stateFile = ".dcad-gui-state";
+// Startup opens a real, tracked script file. There is no hidden session file.
+private enum string defaultFile = "gui/scripts/default.d";
 private enum float sidebarWidth = 220f;
 private enum float partsOverlayWidth = 170f;
 private enum float iconSize = 18f;
@@ -152,28 +144,19 @@ void main(string[] args)
     scope(exit) dcad_textedit_free(editor);
     dcad_textedit_set_light_palette(editor);
 
-    immutable workDir = buildPath(".dcad-gui-scripts");
+    // Hot-load artefacts live in the system temp dir, never in the repo.
+    immutable workDir = buildPath(tempDir(), "dcad-gui-" ~ getpid.to!string);
     mkdirRecurse(workDir);
-    scope(exit) { /* keep generated scripts out of the repo via gitignore */ }
 
     immutable root = repoRoot();
     auto host = new ScriptHost(workDir, root);
     auto viewport = new Viewport();
     scope(exit) viewport.dispose(); // context is still current at scope exit
 
-    // Restore last script (Phase 4 persistence, trivial here).
-    bool restoredState;
-    if (exists(stateFile))
-    {
-        auto saved = readText(stateFile);
-        if (saved.length)
-        {
-            dcad_textedit_set_text(editor, saved.toStringz);
-            restoredState = true;
-        }
-    }
-    if (!restoredState)
-        dcad_textedit_set_text(editor, defaultScript.toStringz);
+    // Open a real project file, so the tab name is always truthful and Save
+    // never needs a hidden scratch destination.
+    dcad_textedit_set_text(editor, readText(defaultFile).toStringz);
+    string currentFile = defaultFile;
 
     string status = "Ready - press Ctrl+Enter (Cmd+Enter) or Run";
     string lastError;
@@ -181,9 +164,7 @@ void main(string[] args)
     float deflection = 1.0f;
     Shape currentShape;
 
-    // Project tree state. A restored session is backed by the state file, so
-    // it counts as an open file rather than an anonymous buffer.
-    string currentFile = restoredState ? stateFile : "";
+    // Project tree state.
     bool[string] folderOpen = [
         "source": true,
         "gui": true,
@@ -386,11 +367,10 @@ void main(string[] args)
             if (iconButton(iconSave, "Save script"))
             {
                 import std.string : fromStringz;
-                immutable target = currentFile.length
-                    ? buildPath(root, currentFile) : stateFile;
-                write(target, fromStringz(dcad_textedit_get_text(editor)).idup);
                 if (!currentFile.length)
-                    currentFile = stateFile;
+                    currentFile = defaultFile;
+                immutable target = buildPath(root, currentFile);
+                write(target, fromStringz(dcad_textedit_get_text(editor)).idup);
                 status = "Saved " ~ target;
             }
             dcad_gui_same_line();

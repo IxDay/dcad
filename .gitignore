@@ -10,8 +10,6 @@
 /dcad-gui
 /dcad-script-host-smoke
 /table/
-/.dcad-gui-state
-/.dcad-gui-scripts/
 /dcad-export.step
 /imgui.ini
 /dub.selections.json
