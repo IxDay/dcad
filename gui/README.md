@@ -28,7 +28,8 @@ sidebar is always visible. The coffee-table sample and its animation are
 available in `samples/coffee-table/` for a quick demo; each element also has its
 own module there, which you can open and Run to preview that element alone.
 When an animated script is loaded, its parts are listed as a transparent overlay
-in the top-right of the preview and hovering a part highlights it in the render.
+in the top-right of the preview: hovering a part highlights it in the render, and
+clicking it opens the source module that builds that part.
 
 ## Controls
 
@@ -42,12 +43,14 @@ in the top-right of the preview and hovering a part highlights it in the render.
 | Display toggles | Icon buttons with check marks: axes, grid, wireframe, orthographic |
 | Save script | Save icon → writes the open script file |
 | Project tree | Expand/collapse folders; click a file to open it |
-| Parts list | Hover a part in the preview's top-right overlay to highlight it |
-| Animate | Play/pause and restart icons, `Time`, `FPS`, `Steps` (animated scripts only) |
+| Parts list | Hover a part to highlight it; click to open its source `.d` file |
+| Animate | Play/pause and restart icons, full-width timeline (click/drag to scrub), `FPS`, `Steps` (animated scripts only) |
 
-The sidebar, editor and preview use a fixed 220px / 44% / remaining split: they
-cannot be dragged, resized or re-docked, and none has a title header. The parts
-overlay appears only for animated scripts and has no pane, border or background.
+The sidebar, editor and preview use a fixed 220px / 120-character / remaining
+split: they cannot be dragged, resized or re-docked, and none has a title header.
+The editor always shows 120 monospace columns and the preview gets what remains.
+The parts overlay appears only for animated scripts and has no pane, border or
+background.
 File icons are rasterised from the light variants in VS Code's `theme-seti`
 extension and UI icons from its codicon font, giving PNGs in
 `gui/assets/icons/`. Regenerate them with
@@ -62,7 +65,9 @@ keep scrollbars enabled for long content, while the preview pane never scrolls.
 The viewport has an OpenSCAD-in-VS-Code style toolbar built from VS Code's own
 codicon icons (rasterised to PNG), with hover tooltips.
 The first row frames the model or switches to one of the six standard views plus
-the default axonometric view. The second row toggles the axis cross, ground grid,
+the default axonometric view. A new mesh or a pane resize refits the camera to the
+whole bounding sphere for the current aspect ratio, so the object stays in view.
+The second row toggles the axis cross, ground grid,
 wireframe rendering and orthographic projection. `Deflection` controls OCCT mesh
 density. The pane never scrolls: the animation controls sit above the canvas,
 and the image is sized to the space that remains, so everything fits vertically.
@@ -70,9 +75,10 @@ and the image is sized to the space that remains, so everything fits vertically.
 ### Animation
 
 The animation panel follows OpenSCAD's animation window: **Animate** starts and
-pauses playback, **Time** scrubs through the cycle in seconds, and one cycle
-takes `Steps / FPS` seconds. `$t` is the normalised position (0 → 1) passed to
-the script's keyframe sampler.
+pauses playback, the full-width timeline fills as the cycle advances (click or
+drag anywhere on it to scrub), and one cycle takes `Steps / FPS` seconds. The
+overlay shows elapsed time; the normalised position (0 → 1) is passed to the
+script's keyframe sampler internally.
 
 A body-style script opts into playback with two extra locals alongside `result`;
 a module-style script exposes them as `dcadParts()` / `dcadPoses()` functions:

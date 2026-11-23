@@ -421,6 +421,17 @@ extern "C" void dcad_gui_align_text_to_frame_padding(void)
 {
     ImGui::AlignTextToFramePadding();
 }
+extern "C" float dcad_gui_char_width(void) { return ImGui::CalcTextSize("M").x; }
+extern "C" float dcad_gui_content_region_avail_x(void)
+{
+    return ImGui::GetContentRegionAvail().x;
+}
+extern "C" void dcad_gui_progress_bar(float fraction, float w, float h,
+                                      const char* overlay)
+{
+    ImGui::ProgressBar(fraction < 0.0f ? 0.0f : fraction > 1.0f ? 1.0f : fraction,
+                       ImVec2(w, h), overlay);
+}
 extern "C" void dcad_gui_separator(void) { ImGui::Separator(); }
 extern "C" void dcad_gui_vertical_separator(void)
 {
@@ -554,6 +565,15 @@ extern "C" void dcad_gui_get_mouse_delta(float* x, float* y)
 extern "C" void dcad_gui_get_io_mouse_delta(float* x, float* y)
 {
     ImVec2 d = ImGui::GetIO().MouseDelta; *x = d.x; *y = d.y;
+}
+extern "C" void dcad_gui_get_mouse_pos(float* x, float* y)
+{
+    ImVec2 p = ImGui::GetMousePos(); *x = p.x; *y = p.y;
+}
+extern "C" void dcad_gui_get_item_rect(float* x0, float* y0, float* x1, float* y1)
+{
+    ImVec2 lo = ImGui::GetItemRectMin(), hi = ImGui::GetItemRectMax();
+    *x0 = lo.x; *y0 = lo.y; *x1 = hi.x; *y1 = hi.y;
 }
 extern "C" float dcad_gui_get_mouse_wheel_y(void) { return ImGui::GetIO().MouseWheel; }
 extern "C" int dcad_gui_mouse_down(int button)

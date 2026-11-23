@@ -5,7 +5,7 @@
  */
 module gui.viewport;
 
-import std.math : sin, cos, sqrt, PI;
+import std.math : sin, cos, atan, sqrt, PI;
 import std.stdio : stderr;
 
 import bindbc.opengl;
@@ -199,6 +199,7 @@ private:
     float distance = 200f;
     float[3] target = [0, 0, 0];
     bool cameraInitialized;
+    bool fitPending;
 
 public:
     this()
@@ -355,12 +356,8 @@ private:
         }
         mesh.radius = maxSpan > 0 ? maxSpan / 2 : 1;
         rebuildGuides(lo[2]);
-        if (!cameraInitialized)
-        {
-            target = mesh.center;
-            distance = mesh.radius * 3.2f + 10;
-            cameraInitialized = true;
-        }
+        cameraInitialized = true;
+        fitPending = true;
     }
 
     /// Grid + axis-cross geometry, rebuilt whenever a new mesh is framed.
@@ -437,11 +434,20 @@ public:
     void viewRight() { setView(0, 0); }
     void viewLeft()  { setView(PI, 0); }
 
+    /// Frame the whole bounding sphere for the current pane aspect ratio.
     void fitAll()
     {
         if (!cameraInitialized) return;
         target = mesh.center;
-        distance = mesh.radius * 3.2f + 10;
+        immutable fov = 0.8f;
+        immutable aspect = height > 0 ? cast(float) width / height : 1.6f;
+        // Perspective needs sin() of the half-angle; orthographic uses tan().
+        immutable vHalf = orthographic ? tan(fov / 2) : sin(fov / 2);
+        immutable hHalf = orthographic
+            ? tan(fov / 2) * aspect
+            : sin(atan(tan(fov / 2) * aspect));
+        immutable limiting = vHalf < hHalf ? vHalf : hHalf;
+        distance = mesh.radius / limiting * 1.12f + 2f;
     }
 
     void resetCamera()
@@ -472,6 +478,14 @@ public:
             width = w;
             height = h;
             resizeTargets();
+            // A new pane aspect can clip the model: refit whenever the canvas
+            // changes size, and also after every new mesh.
+            fitPending = true;
+        }
+        if (fitPending)
+        {
+            fitAll();
+            fitPending = false;
         }
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         glViewport(0, 0, width, height);

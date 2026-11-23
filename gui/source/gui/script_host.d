@@ -69,6 +69,15 @@ private string partLabel(T)(ref T part) {
         return "part";
 }
 
+private string partId(T)(ref T part) {
+    static if (is(typeof(part.id) == string))
+        return part.id;
+    else static if (is(typeof(part.name) == string))
+        return part.name;
+    else
+        return "part";
+}
+
 /* Optional animation protocol. A body-style script defines two locals; a
  * module-style script exposes two functions with the same values:
  *   <array of NamedPart-like values with .id and .shape>;
@@ -83,6 +92,7 @@ private string partLabel(T)(ref T part) {
  * nothing. */
 private void** g_animShapePtrs;
 private char** g_animNames;
+private char** g_animIds;
 private size_t g_animShapeCount;
 private double* g_poseData;
 private size_t g_poseFrames;
@@ -99,6 +109,7 @@ private void captureAnimation(Parts, Poses)(Parts parts, Poses poses)
     {
         g_animShapePtrs = cast(void**) malloc(np * size_t.sizeof);
         g_animNames = cast(char**) malloc(np * size_t.sizeof);
+        g_animIds = cast(char**) malloc(np * size_t.sizeof);
     }
     if (nf > 0 && np > 0)
     {
@@ -122,6 +133,17 @@ private void captureAnimation(Parts, Poses)(Parts parts, Poses poses)
                 name[label.length] = 0;
             }
             g_animNames[i] = name;
+        }
+        if (g_animIds !is null)
+        {
+            auto ident = partId(p);
+            auto name = cast(char*) malloc(ident.length + 1);
+            if (name !is null)
+            {
+                memcpy(name, ident.ptr, ident.length);
+                name[ident.length] = 0;
+            }
+            g_animIds[i] = name;
         }
         if (g_poseData !is null)
             foreach (fi, pose; poses)
@@ -205,6 +227,12 @@ extern(C) export const(char)* dcad_anim_part_name(int i)
     return g_animNames[i];
 }
 
+extern(C) export const(char)* dcad_anim_part_id(int i)
+{
+    if (i < 0 || i >= g_animShapeCount || g_animIds is null) return null;
+    return g_animIds[i];
+}
+
 /// Linear interpolation between keyframes, written as dx/dy/dz per part.
 extern(C) export void dcad_anim_pose(double t, double* offsets)
 {
@@ -239,9 +267,16 @@ extern(C) export void dcad_anim_free()
             if (g_animNames[i] !is null) free(g_animNames[i]);
         free(g_animNames);
     }
+    if (g_animIds !is null)
+    {
+        foreach (i; 0 .. g_animShapeCount)
+            if (g_animIds[i] !is null) free(g_animIds[i]);
+        free(g_animIds);
+    }
     if (g_poseData !is null) free(g_poseData);
     g_animShapePtrs = null;
     g_animNames = null;
+    g_animIds = null;
     g_poseData = null;
     g_animShapeCount = 0;
     g_poseFrames = 0;
@@ -422,6 +457,17 @@ public:
         if (handle is null) return null;
         alias Fn = extern(C) const(char)* function(int);
         auto fn = cast(Fn) dlsym(handle, "dcad_anim_part_name");
+        if (fn is null) return null;
+        auto p = fn(i);
+        return p is null ? null : fromStringz(p).idup;
+    }
+
+    /// Stable id for an animation part, used to find its source module.
+    string animPartId(int i)
+    {
+        if (handle is null) return null;
+        alias Fn = extern(C) const(char)* function(int);
+        auto fn = cast(Fn) dlsym(handle, "dcad_anim_part_id");
         if (fn is null) return null;
         auto p = fn(i);
         return p is null ? null : fromStringz(p).idup;

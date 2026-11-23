@@ -10,7 +10,7 @@ module gui.app;
 import std.stdio : stderr, writeln;
 import std.file : mkdirRecurse, exists, readText, write, dirEntries, SpanMode, isDir, tempDir;
 import std.path : buildPath, baseName, extension;
-import std.string : toStringz, format, startsWith;
+import std.string : toStringz, format, startsWith, endsWith;
 import std.algorithm.sorting : sort;
 import std.array : array;
 import std.conv : to;
@@ -30,6 +30,10 @@ private enum string defaultFile = "samples/coffee-table/table.d";
 private enum float sidebarWidth = 220f;
 private enum float partsOverlayWidth = 170f;
 private enum float iconSize = 18f;
+// The editor always shows 120 monospace columns; whatever remains goes to the
+// preview. A floor keeps the 3D pane usable on narrow windows.
+private enum int editorColumns = 120;
+private enum float minViewportWidth = 240f;
 
 // Icon textures rasterised from VS Code's own assets: the `theme-seti`
 // extension's light file icons and codicons for folders/toolbar. See
@@ -65,6 +69,26 @@ private enum iconFileShell     = FileIcon("file-shell");
 private enum iconFileConfig    = FileIcon("file-config");
 
 private void*[string] iconCache;
+
+/// Source module of an animation part, from its stable id. The part ids are
+/// shared with the motion keyframes, so this stays a pure naming convention:
+/// clicking a row in the parts list opens the file that builds that geometry.
+private string partSourceFile(string id)
+{
+    if (id.length == 0) return null;
+    string moduleName;
+    if (id.startsWith("leg-"))                   moduleName = "leg";
+    else if (id.startsWith("apron-side-"))       moduleName = "side_apron";
+    else if (id.startsWith("apron-end-"))        moduleName = "end_apron";
+    else if (id.startsWith("rail-cross-"))       moduleName = "cross_rail";
+    else if (id.startsWith("top-") && id.endsWith("-outer"))
+                                                  moduleName = "top_outer";
+    else if (id.startsWith("top-") && id.endsWith("-inner"))
+                                                  moduleName = "top_inner";
+    else if (id.startsWith("wedge-"))            moduleName = "wedge";
+    else return null;
+    return "samples/coffee-table/" ~ moduleName ~ ".d";
+}
 
 private void* iconTexture(string name)
 {
@@ -113,10 +137,21 @@ void main(string[] args)
     }
     scope(exit) glfwTerminate();
 
+    // Size to the monitor so a 120-character editor still leaves a useful
+    // preview pane. The window stays smaller than the screen on small displays.
+    auto mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+    int windowW = 1440;
+    int windowH = 900;
+    if (mode !is null)
+    {
+        windowW = mode.width;
+        windowH = mode.height - 60;
+    }
+
     // macOS needs a compatibility profile for GL 2.1 shaders (GLSL 120).
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-    auto window = glfwCreateWindow(1440, 900, "dcad - editor + preview",
+    auto window = glfwCreateWindow(windowW, windowH, "dcad - editor + preview",
                                    null, null);
     if (window is null)
     {
@@ -322,9 +357,17 @@ void main(string[] args)
         // overlay inside the preview, not a fourth pane.
         float vw, vh;
         dcad_gui_get_viewport_size(&vw, &vh);
-        immutable editorW = (vw - sidebarWidth) * 0.44f;
-        immutable viewportW = vw - sidebarWidth - editorW;
+        // Fixed 120-column editor, independent of window size; the preview
+        // pane gets what is left (never less than a usable minimum).
+        immutable charW = dcad_gui_char_width();
+        immutable wantedEditorW = charW * editorColumns + 48f;
+        immutable availableW = vw - sidebarWidth;
+        immutable roomForEditor = availableW - minViewportWidth;
+        immutable editorW = wantedEditorW < roomForEditor
+            ? wantedEditorW : (roomForEditor > 200f ? roomForEditor : 200f);
+        immutable viewportW = availableW - editorW;
         int hoveredPart = -1;
+        bool uiCaptured;
 
         // Run trigger: global key chord, or the editor's Run button.
         bool doRun = dcad_gui_key_chord_pressed(modCtrl | keyEnter) != 0;
@@ -489,15 +532,6 @@ void main(string[] args)
                     animPlaying = true;
                 }
                 dcad_gui_same_line();
-                dcad_gui_text(("  $t = " ~ format("%.2f",
-                    animTime / cycleSeconds())).toStringz);
-                dcad_gui_same_line();
-                dcad_gui_set_next_item_width(100);
-                float timeF = cast(float) animTime;
-                if (dcad_gui_slider_float("Time", &timeF, 0,
-                                          cast(float) cycleSeconds()) != 0)
-                    animTime = timeF;
-                dcad_gui_same_line();
                 dcad_gui_set_next_item_width(50);
                 if (dcad_gui_input_float("FPS", &animFps, 1) != 0 && animFps < 1)
                     animFps = 1;
@@ -506,6 +540,23 @@ void main(string[] args)
                 if (dcad_gui_input_int("Steps", &animSteps, 1) != 0 &&
                     animSteps < 1)
                     animSteps = 1;
+
+                // Timeline: a bar that fills the full pane width. Its fill
+                // grows with time (no moving cursor); click/drag to scrub.
+                immutable cycle = cycleSeconds();
+                dcad_gui_progress_bar(cast(float)(animTime / cycle),
+                    dcad_gui_content_region_avail_x(), 20f,
+                    format("  %.2f / %.2f s  ", animTime, cycle).toStringz);
+                float barX0, barY0, barX1, barY1;
+                dcad_gui_get_item_rect(&barX0, &barY0, &barX1, &barY1);
+                float mx, my;
+                dcad_gui_get_mouse_pos(&mx, &my);
+                if (mx >= barX0 && mx <= barX1 && my >= barY0 && my <= barY1)
+                {
+                    uiCaptured = true;
+                    if (dcad_gui_mouse_down(mouseLeft) && barX1 > barX0)
+                        animTime = (mx - barX0) / (barX1 - barX0) * cycle;
+                }
             }
             dcad_gui_separator();
 
@@ -516,8 +567,23 @@ void main(string[] args)
             immutable remaining = (y + h - 8f) - cursorY;
             immutable imgH = remaining > 80 ? remaining : 80;
 
+            // The parts overlay and the timeline own their mouse area; don't
+            // let a click there also orbit the camera.
+            if (hasAnimation)
+            {
+                immutable rowH = 19f;
+                immutable startX = cursorX + imgW - partsOverlayWidth - 6f - 3f;
+                immutable startY = cursorY + 6f - 2f;
+                float mx, my;
+                dcad_gui_get_mouse_pos(&mx, &my);
+                if (mx >= startX && mx <= startX + partsOverlayWidth &&
+                    my >= startY &&
+                    my < startY + cast(float) host.animPartCount() * rowH)
+                    uiCaptured = true;
+            }
+
             // Camera interaction: left drag orbit, right/middle drag pan, wheel zoom.
-            if (dcad_gui_is_window_hovered())
+            if (dcad_gui_is_window_hovered() && !uiCaptured)
             {
                 float dx, dy;
                 dcad_gui_get_io_mouse_delta(&dx, &dy);
@@ -573,13 +639,31 @@ void main(string[] args)
                     dcad_gui_text(name.toStringz);
 
                     dcad_gui_set_cursor_screen_pos(startX - 3f, rowY - 2f);
-                    dcad_gui_invisible_button(("##part" ~ i.to!string).toStringz,
-                                              partsOverlayWidth, rowH);
+                    auto ident = host.animPartId(cast(int) i);
+                    auto rel = partSourceFile(ident);
+                    if (rel is null) rel = partSourceFile(name);
+                    if (dcad_gui_invisible_button(
+                            ("##part" ~ i.to!string).toStringz,
+                            partsOverlayWidth, rowH) != 0 && rel !is null)
+                    {
+                        try
+                        {
+                            dcad_textedit_set_text(
+                                editor, readText(buildPath(root, rel)).toStringz);
+                            currentFile = rel;
+                            status = "Opened " ~ rel;
+                        }
+                        catch (Exception)
+                        {
+                            status = "Cannot open " ~ rel;
+                        }
+                    }
                     if (dcad_gui_is_item_hovered())
                     {
                         hoveredPart = cast(int) i;
-                        dcad_gui_set_item_tooltip(
-                            ("Highlight " ~ name).toStringz);
+                        dcad_gui_set_item_tooltip(rel is null
+                            ? ("Highlight " ~ name).toStringz
+                            : ("Open " ~ rel).toStringz);
                     }
                 }
             }

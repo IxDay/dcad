@@ -88,6 +88,9 @@ extern(C) nothrow @nogc
     void dcad_gui_set_item_tooltip(const(char)* text);
     void dcad_gui_same_line();
     void dcad_gui_align_text_to_frame_padding();
+    float dcad_gui_char_width();
+    float dcad_gui_content_region_avail_x();
+    void dcad_gui_progress_bar(float fraction, float w, float h, const(char)* overlay);
     void dcad_gui_separator();
     void dcad_gui_vertical_separator();
     void dcad_gui_spacing();
@@ -118,6 +121,8 @@ extern(C) nothrow @nogc
     // input
     void  dcad_gui_get_mouse_delta(float* x, float* y);
     void  dcad_gui_get_io_mouse_delta(float* x, float* y);
+    void  dcad_gui_get_mouse_pos(float* x, float* y);
+    void  dcad_gui_get_item_rect(float* x0, float* y0, float* x1, float* y1);
     float dcad_gui_get_mouse_wheel_y();
     int   dcad_gui_mouse_down(int button);
     int   dcad_gui_mouse_clicked(int button);
