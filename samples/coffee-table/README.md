@@ -1,9 +1,9 @@
 # Coffee table (dcad / OCCT port)
 
 A direct D port of `../../cadquery/samples/coffee-table` (a Go/fluent-sdfx port
-of the CadQuery model in `platipy/coffee-table`). Unlike the Go sample, this
-version emits **exact B-rep STEP files** instead of decimated STL meshes — no
-rendering or viewer integration is involved.
+of the CadQuery model in `platipy/coffee-table`). The same modules drive the
+GUI's live 3D preview; `table.d` also has an optional standalone main that emits
+**exact B-rep STEP files** instead of decimated STL meshes.
 
 The model is a **1400 × 600 × 362 mm knock-down timber table** with traditional
 mortise-and-tenon joinery. X runs along the table 0…1400, Y across it −300…300,
@@ -22,20 +22,23 @@ Z up 0…362.
 
 | File | Role |
 | --- | --- |
-| `coffee_dimensions.d` | constants, `legX()`, `apronAnchors()`, `block()` |
-| `coffee_util.d` | shim wrappers: transform, cut/union, centred prism, export |
-| `coffee_parts.d` | the seven part builders and `tableParts()` |
-| `coffee_motion.d` | knock-down animation tracks → JSON |
-| `main.d` | writes all outputs and checks overall bounds |
+| `dimensions.d` | constants, `legX()`, `apronAnchors()`, `block()` |
+| `util.d` | shim wrappers: transform, cut/union, centred prism, export |
+| `leg.d`, `side_apron.d`, `end_apron.d`, `cross_rail.d`, `top_outer.d`, `top_inner.d`, `wedge.d` | one runnable module per element, each exposing `Shape build()` |
+| `motion.d` | knock-down animation tracks → JSON |
+| `table.d` | imports every part plus the motion, assembles the 18 timbers, and exposes the GUI entry points (`dcadMain`, `dcadParts`, `dcadPoses`); its version-gated `main` writes the outputs |
 
-`main.d` requires two shim helpers beyond the core library (both in
-`shim/dcad_shim.cpp`): `dcad_guarded_transform` (gp_Trsf + BRepBuilderAPI_Transform,
-since `gp_Trsf`'s constructors are inline) and `dcad_make_compound`.
+Open any element file (or `table.d`) in the GUI and press Run to render it. The
+standalone main uses two shim helpers beyond the core library (both in
+`shim/dcad_shim.cpp`): `dcad_guarded_transform` (gp_Trsf +
+BRepBuilderAPI_Transform, since `gp_Trsf`'s constructors are inline) and
+`dcad_make_compound`.
 
 ## Build
 
 ```bash
-dub run :coffee-table       # from the repository root
+dub run :coffee-table       # STEP files + animation JSON, from the repo root
+dub run :gui                # preview an element or the whole animated table
 ```
 
 ## Outputs

@@ -1,8 +1,8 @@
 // Coffee-table knock-down animation -- paste into the editor with File >
 // Reset to example replaced, or copy the whole file into the script pane.
-import coffee_parts : tableParts;
-import coffee_util : compound;
-import coffee_motion : allPoses;
+import table : tableParts;
+import util : compound;
+import motion : allPoses;
 import dcad.shape : Shape;
 
 auto parts = tableParts();

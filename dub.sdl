@@ -58,6 +58,7 @@ subPackage {
     targetName "coffee-table"
     sourcePaths "samples/coffee-table"
     importPaths "samples/coffee-table" "source"
+    versions "Standalone"
     dependency "dcad" version="*"
 }
 

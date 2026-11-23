@@ -2,10 +2,10 @@
  * Knock-down animation data, ported from motion.py / motion.go.
  *
  * This only emits motion offsets as JSON -- no viewer or mesh generation is
- * involved. Tracks reference the STEP files written by main.d so the data is
- * self-consistent with the files actually produced here.
+ * involved. Tracks reference the STEP files written by table.d's optional
+ * standalone main, so the data matches the files actually produced there.
  */
-module coffee_motion;
+module motion;
 
 import std.algorithm.searching : canFind;
 import std.algorithm.sorting : sort;

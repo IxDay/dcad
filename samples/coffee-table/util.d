@@ -5,7 +5,7 @@
  * fluent-sdfx's rigid transforms and multi-cut/union helpers, which map to
  * gp_Trsf + BRepBuilderAPI_Transform and BRepAlgoAPI_Cut/Fuse here.
  */
-module coffee_util;
+module util;
 
 import std.string : toStringz;
 import dcad.shape : Shape, checkOcct;

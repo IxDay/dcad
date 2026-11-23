@@ -75,7 +75,7 @@ your VS Code Base16 Default Light palette with an OpenSCAD-style renderer. The w
 recommends `webfreak.code-d` for D LSP support in VS Code. Scripts are D source
 compiled to a hot-loaded shared library on each Run; both legacy script bodies
 and module-style scripts are supported, including one runnable module per
-element under `samples/parts/`. See [`gui/README.md`](gui/README.md) for controls
+element in `samples/coffee-table/`. See [`gui/README.md`](gui/README.md) for controls
 and the execution-model tradeoff.
 
 ## Samples

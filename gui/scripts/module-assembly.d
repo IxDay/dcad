@@ -9,9 +9,9 @@
 module module_assembly;
 
 import dcad.shape : Shape;
-import coffee_util : NamedPart, compound;
-import coffee_parts : tableParts;
-import coffee_motion : allPoses;
+import util : NamedPart, compound;
+import table : tableParts;
+import motion : allPoses;
 
 Shape dcadMain()
 {

@@ -12,8 +12,8 @@ brew install glfw                     # one-time, macOS
 dub run :gui
 ```
 
-The window opens the real tracked file `gui/scripts/default.d` and renders it
-in your VS Code **Base16 Default Light** palette (`#f8f8f8` editor, `#f9f9f9` sidebar,
+The window opens the real tracked file `samples/coffee-table/table.d` and
+renders it in your VS Code **Base16 Default Light** palette (`#f8f8f8` editor, `#f9f9f9` sidebar,
 `#383838` text, `#7cafc2` accents). The code editor uses D-aware syntax colours
 from the same theme, with D keywords and `@attribute` highlighting. The 3D
 preview uses an OpenSCAD-style renderer: near-white background, neutral
@@ -25,8 +25,8 @@ The left sidebar shows the repository file tree with the exact file icons VS Cod
 uses (its built-in Seti icon theme, extracted to PNGs). Click a disclosure arrow
 to expand or collapse folders, and click a file to load it into the editor. The
 sidebar is always visible. The coffee-table sample and its animation are
-available under `samples` for a quick demo; each element also has its own module
-under `samples/parts/`, which you can open and Run to preview that element alone.
+available in `samples/coffee-table/` for a quick demo; each element also has its
+own module there, which you can open and Run to preview that element alone.
 When an animated script is loaded, its parts are listed as a transparent overlay
 in the top-right of the preview and hovering a part highlights it in the render.
 
@@ -87,7 +87,7 @@ playback only uploads one translation uniform per part per frame, so the 18-part
 coffee-table animation runs without any OCCT work in the render loop. Keyframes
 are plain data (no delegates), so nothing outlives the script's stack frame.
 See [`scripts/coffee-table-animation.d`](scripts/coffee-table-animation.d) for
-the full script, and `coffee_motion.allPoses()` for the knock-down keyframes.
+the full script, and `motion.allPoses()` for the knock-down keyframes.
 
 ## Script contract
 
@@ -140,10 +140,12 @@ See [`scripts/module-assembly.d`](scripts/module-assembly.d).
 
 ### One file per element
 
-Modules under `samples/parts/` export `Shape build()` and are always compiled
-into the plugin. Open `samples/parts/leg.d` from the project tree and press Run:
-the host displays that leg alone, with no separate viewer script. An assembly
-script imports only the elements it needs:
+The element files in `samples/coffee-table/` export `Shape build()` and are
+always compiled into the plugin. Open `samples/coffee-table/leg.d` from the
+project tree and press Run: the host displays that leg alone, with no separate
+viewer script. `samples/coffee-table/table.d` imports every element plus the
+motion data and exposes the full animated assembly. An assembly script imports
+only the elements it needs:
 
 ```d
 import parts.leg : leg = build;
@@ -170,7 +172,7 @@ shape pointers cross the plugin boundary safely on macOS/ARM64 with LDC 1.43
 gui/source/gui/app.d           GLFW window, ImGui frame, two panes, main loop
 gui/source/gui/script_host.d   compile + dlopen + both script forms + error capture
 gui/source/gui/viewport.d      FBO render-to-texture, VBO mesh, camera, shading
-samples/parts/                 one runnable module per coffee-table element
+samples/coffee-table/          dimensions, util, one file per element, motion, table
 gui/source/gui/imgui.d         extern(C) declarations for the C++ shim
 gui/shim/dcad_gui_shim.cpp     ImGui + backends + TextEditor + OCCT mesher wrappers
 gui/vendor/                    vendored ImGui (docking) + ImGuiColorTextEdit

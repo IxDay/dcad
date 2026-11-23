@@ -31,7 +31,7 @@ int main()
     }
 
     // One element module, opened and run directly from the project tree.
-    auto element = host.run(readText(buildPath(root, "samples/parts/leg.d")));
+    auto element = host.run(readText(buildPath(root, "samples/coffee-table/leg.d")));
     if (!element.ok())
     {
         stderr.writeln("element module failed: ", element.error);

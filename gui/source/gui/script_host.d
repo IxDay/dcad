@@ -288,29 +288,16 @@ public:
     {
         this.workDir = workDir;
         this.repoRoot = repoRoot;
-        // Extra source roots scripts may import: bundled samples. LDC does
-        // not compile imported modules unless they are passed explicitly, so
-        // list the sample's modules as additional translation units.
+        // LDC does not follow imports, so every module of the bundled sample
+        // is passed explicitly. One flat directory keeps this automatic:
+        // dimensions, util, one file per part, motion and the table assembly.
         immutable sampleDir = buildPath(repoRoot, "samples/coffee-table");
         importPaths = [sampleDir];
-        extraSources = [
-            buildPath(sampleDir, "coffee_dimensions.d"),
-            buildPath(sampleDir, "coffee_util.d"),
-            buildPath(sampleDir, "coffee_parts.d"),
-            buildPath(sampleDir, "coffee_motion.d"),
-        ];
-        // One module per element: samples/parts/*.d is always part of the
-        // plugin, so an assembly script can import any of them by name and a
-        // single element file can be run directly from the project tree.
-        immutable partsDir = buildPath(repoRoot, "samples/parts");
-        if (exists(partsDir))
+        if (exists(sampleDir))
         {
-            importPaths ~= buildPath(repoRoot, "samples");
-            string[] elements;
-            foreach (entry; dirEntries(partsDir, "*.d", SpanMode.shallow))
-                elements ~= entry.name;
-            elements.sort();
-            extraSources ~= elements;
+            foreach (entry; dirEntries(sampleDir, "*.d", SpanMode.shallow))
+                extraSources ~= entry.name;
+            extraSources.sort();
         }
         buildLinkArgs();
     }

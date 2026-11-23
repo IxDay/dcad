@@ -26,7 +26,7 @@ import gui.script_host : ScriptHost, RunResult;
 import dcad.shape : Shape;
 
 // Startup opens a real, tracked script file. There is no hidden session file.
-private enum string defaultFile = "gui/scripts/default.d";
+private enum string defaultFile = "samples/coffee-table/table.d";
 private enum float sidebarWidth = 220f;
 private enum float partsOverlayWidth = 170f;
 private enum float iconSize = 18f;

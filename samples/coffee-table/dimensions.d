@@ -2,10 +2,10 @@
  * Dimensions mirrored from dimensions.py in the platipy/coffee-table project.
  * X runs along the table 0..1400, Y across it centred on 0, Z up from the floor.
  */
-module coffee_dimensions;
+module dimensions;
 
 import std.math : floor;
-import coffee_util : fromNative, transform;
+import util : fromNative, transform;
 import dcad.shape : Shape, checkOcct;
 
 extern(C) nothrow @nogc
