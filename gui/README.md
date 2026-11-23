@@ -46,11 +46,10 @@ clicking it opens the source module that builds that part.
 | Parts list | Hover a part to highlight it; click to open its source `.d` file |
 | Animate | Play/pause and restart icons, full-width timeline (click/drag to scrub), `FPS`, `Steps` (animated scripts only) |
 
-The sidebar, editor and preview use a fixed 220px / 120-character / remaining
-split: they cannot be dragged, resized or re-docked, and none has a title header.
-The editor always shows 120 monospace columns and the preview gets what remains.
-The parts overlay appears only for animated scripts and has no pane, border or
-background.
+The sidebar, editor and preview use a fixed 220px sidebar and a 3:2
+editor-to-preview split of the remaining width: they cannot be dragged, resized
+or re-docked, and none has a title header. The parts overlay appears only for
+animated scripts and has no pane, border or background.
 File icons are rasterised from the light variants in VS Code's `theme-seti`
 extension and UI icons from its codicon font, giving PNGs in
 `gui/assets/icons/`. Regenerate them with

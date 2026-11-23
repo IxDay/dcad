@@ -88,7 +88,6 @@ extern(C) nothrow @nogc
     void dcad_gui_set_item_tooltip(const(char)* text);
     void dcad_gui_same_line();
     void dcad_gui_align_text_to_frame_padding();
-    float dcad_gui_char_width();
     float dcad_gui_content_region_avail_x();
     void dcad_gui_progress_bar(float fraction, float w, float h, const(char)* overlay);
     void dcad_gui_separator();

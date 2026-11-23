@@ -421,7 +421,6 @@ extern "C" void dcad_gui_align_text_to_frame_padding(void)
 {
     ImGui::AlignTextToFramePadding();
 }
-extern "C" float dcad_gui_char_width(void) { return ImGui::CalcTextSize("M").x; }
 extern "C" float dcad_gui_content_region_avail_x(void)
 {
     return ImGui::GetContentRegionAvail().x;

@@ -30,10 +30,8 @@ private enum string defaultFile = "samples/coffee-table/table.d";
 private enum float sidebarWidth = 220f;
 private enum float partsOverlayWidth = 170f;
 private enum float iconSize = 18f;
-// The editor always shows 120 monospace columns; whatever remains goes to the
-// preview. A floor keeps the 3D pane usable on narrow windows.
-private enum int editorColumns = 120;
-private enum float minViewportWidth = 240f;
+// Split the space left after the sidebar: 3/5 code editor, 2/5 preview.
+private enum float editorShare = 3.0f / 5.0f;
 
 // Icon textures rasterised from VS Code's own assets: the `theme-seti`
 // extension's light file icons and codicons for folders/toolbar. See
@@ -357,14 +355,10 @@ void main(string[] args)
         // overlay inside the preview, not a fourth pane.
         float vw, vh;
         dcad_gui_get_viewport_size(&vw, &vh);
-        // Fixed 120-column editor, independent of window size; the preview
-        // pane gets what is left (never less than a usable minimum).
-        immutable charW = dcad_gui_char_width();
-        immutable wantedEditorW = charW * editorColumns + 48f;
+        // Fixed 3/5 - 2/5 split of the space left after the sidebar: nothing
+        // can be dragged or resized, and the preview never gets squeezed out.
         immutable availableW = vw - sidebarWidth;
-        immutable roomForEditor = availableW - minViewportWidth;
-        immutable editorW = wantedEditorW < roomForEditor
-            ? wantedEditorW : (roomForEditor > 200f ? roomForEditor : 200f);
+        immutable editorW = availableW * editorShare;
         immutable viewportW = availableW - editorW;
         int hoveredPart = -1;
         bool uiCaptured;
