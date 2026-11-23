@@ -417,6 +417,10 @@ extern "C" void dcad_gui_set_item_tooltip(const char* text)
         ImGui::SetTooltip("%s", text);
 }
 extern "C" void dcad_gui_same_line(void) { ImGui::SameLine(); }
+extern "C" void dcad_gui_align_text_to_frame_padding(void)
+{
+    ImGui::AlignTextToFramePadding();
+}
 extern "C" void dcad_gui_separator(void) { ImGui::Separator(); }
 extern "C" void dcad_gui_vertical_separator(void)
 {

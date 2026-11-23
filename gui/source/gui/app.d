@@ -162,13 +162,17 @@ void main(string[] args)
     scope(exit) viewport.dispose(); // context is still current at scope exit
 
     // Restore last script (Phase 4 persistence, trivial here).
+    bool restoredState;
     if (exists(stateFile))
     {
         auto saved = readText(stateFile);
         if (saved.length)
+        {
             dcad_textedit_set_text(editor, saved.toStringz);
+            restoredState = true;
+        }
     }
-    if (!exists(stateFile))
+    if (!restoredState)
         dcad_textedit_set_text(editor, defaultScript.toStringz);
 
     string status = "Ready - press Ctrl+Enter (Cmd+Enter) or Run";
@@ -177,8 +181,9 @@ void main(string[] args)
     float deflection = 1.0f;
     Shape currentShape;
 
-    // Project tree state.
-    string currentFile;
+    // Project tree state. A restored session is backed by the state file, so
+    // it counts as an open file rather than an anonymous buffer.
+    string currentFile = restoredState ? stateFile : "";
     bool[string] folderOpen = [
         "source": true,
         "gui": true,
@@ -342,9 +347,6 @@ void main(string[] args)
 
         // Run trigger: global key chord, or the editor's Run button.
         bool doRun = dcad_gui_key_chord_pressed(modCtrl | keyEnter) != 0;
-        auto displayName = currentFile.length ? baseName(currentFile) : "untitled";
-        if (displayName.length > 20)
-            displayName = displayName[0 .. 17] ~ "...";
 
         // ---------------- Project sidebar (always visible) ----------------
         dcad_gui_set_next_window_pos(0, 0, condAlways);
@@ -366,6 +368,13 @@ void main(string[] args)
         dcad_gui_end();
 
         // ---------------- Editor pane ----------------
+        // Computed here so a click in the file tree updates the label on the
+        // same frame. The built-in script gets a real name, never "untitled".
+        auto displayName = currentFile.length
+            ? baseName(currentFile) : "default.d";
+        if (displayName.length > 20)
+            displayName = displayName[0 .. 17] ~ "...";
+
         dcad_gui_set_next_window_pos(sidebarWidth, 0, condAlways);
         dcad_gui_set_next_window_size(editorW, vh, condAlways);
         if (dcad_gui_begin("Script", fixedPaneFlags))
@@ -380,9 +389,12 @@ void main(string[] args)
                 immutable target = currentFile.length
                     ? buildPath(root, currentFile) : stateFile;
                 write(target, fromStringz(dcad_textedit_get_text(editor)).idup);
+                if (!currentFile.length)
+                    currentFile = stateFile;
                 status = "Saved " ~ target;
             }
             dcad_gui_same_line();
+            dcad_gui_align_text_to_frame_padding();
             dcad_gui_text_colored(displayName.toStringz,
                                   0.35f, 0.35f, 0.35f, 1);
             dcad_gui_separator();

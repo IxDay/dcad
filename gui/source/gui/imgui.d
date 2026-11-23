@@ -87,6 +87,7 @@ extern(C) nothrow @nogc
     int  dcad_gui_button(const(char)* label);
     void dcad_gui_set_item_tooltip(const(char)* text);
     void dcad_gui_same_line();
+    void dcad_gui_align_text_to_frame_padding();
     void dcad_gui_separator();
     void dcad_gui_vertical_separator();
     void dcad_gui_spacing();
