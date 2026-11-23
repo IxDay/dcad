@@ -33,14 +33,13 @@ hovering a part highlights it in the render.
 
 | Action | Input |
 |---|---|
-| Run script | Cmd/Ctrl+Enter, or `Run` button |
+| Run script | Cmd/Ctrl+Enter, or the Run icon |
 | Orbit | Left-drag in the viewport |
 | Pan | Middle/Right-drag in the viewport |
 | Zoom | Scroll over the viewport |
 | Standard view | Icon buttons: fit, iso, up, down, front/back, left/right, reset |
 | Display toggles | Icon buttons with check marks: axes, grid, wireframe, orthographic |
-| Export STEP | `STEP` button → writes `dcad-export.step` |
-| Save script | `Save` button → writes the open file, or `.dcad-gui-state` |
+| Save script | Save icon → writes the open file, or `.dcad-gui-state` |
 | Project tree | Expand/collapse folders; click a file to open it |
 | Parts list | Hover a part in the preview's top-right overlay to highlight it |
 | Animate | Play/pause and restart icons, `Time`, `FPS`, `Steps` (animated scripts only) |
@@ -142,6 +141,6 @@ exposes a flat `extern "C"` surface and also contains the OCCT
 ## Status
 
 Phases 1–3 are working end to end (shell + kernel wiring + camera/shading).
-Phase 4 is partially done: script persistence and STEP export are wired;
+Phase 4 is partially done: script persistence is wired;
 debounced auto-run is intentionally left off because the compile-per-Run model
 is too slow for it.

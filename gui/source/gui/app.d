@@ -24,8 +24,6 @@ import gui.script_host : ScriptHost, RunResult;
 
 import dcad.shape : Shape;
 
-extern(C) nothrow @nogc int dcad_guarded_step_write(const(void)* shape, const(char)* path);
-
 private enum string defaultScript = q{// dcad script -- must end with `result` (a Shape or Workplane).
 auto model = Workplane.create()
     .box(60, 40, 20)
@@ -63,6 +61,7 @@ private enum iconCheck       = "check";
 private enum iconPlay        = "play";
 private enum iconPause       = "pause";
 private enum iconRestart     = "restart";
+private enum iconSave        = "save";
 
 private struct FileIcon { string texture; }
 
@@ -372,10 +371,10 @@ void main(string[] args)
         if (dcad_gui_begin("Script", fixedPaneFlags))
         {
             // Action row at the top of this pane; no menu-bar header.
-            if (dcad_gui_button("Run") || doRun)
+            if (iconButton(iconPlay, "Run script (Cmd/Ctrl+Enter)") || doRun)
                 doRun = true;
             dcad_gui_same_line();
-            if (dcad_gui_button("Save"))
+            if (iconButton(iconSave, "Save script"))
             {
                 import std.string : fromStringz;
                 immutable target = currentFile.length
@@ -383,18 +382,6 @@ void main(string[] args)
                 write(target, fromStringz(dcad_textedit_get_text(editor)).idup);
                 status = "Saved " ~ target;
             }
-            dcad_gui_same_line();
-            if (dcad_gui_button("STEP") && currentShape !is null)
-            {
-                if (dcad_guarded_step_write(&currentShape.native(),
-                                            "dcad-export.step".toStringz) == 0)
-                    status = "Exported dcad-export.step";
-                else
-                    status = "STEP export failed";
-            }
-            dcad_gui_same_line();
-            if (dcad_gui_button("Example"))
-                dcad_textedit_set_text(editor, defaultScript.toStringz);
             dcad_gui_same_line();
             dcad_gui_text_colored(displayName.toStringz,
                                   0.35f, 0.35f, 0.35f, 1);

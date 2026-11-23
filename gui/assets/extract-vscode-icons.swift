@@ -110,7 +110,7 @@ let codicons: [UInt32: String] = [
     0xEA70: "front", 0xEAE7: "back", 0xEBFE: "right", 0xEBFD: "left",
     0xEB37: "refresh", 0xEBD5: "axes", 0xEBB7: "grid", 0xEBD2: "wire",
     0xEA72: "ortho", 0xEAB2: "check", 0xEB2C: "play", 0xEAD1: "pause",
-    0xEAD2: "restart",
+    0xEAD2: "restart", 0xEB4B: "save",
 ]
 for (codepoint, name) in codicons.sorted(by: { $0.value < $1.value }) {
     try rasterGlyph(codiconFont, "codicon", codepoint, name, "#383838")
