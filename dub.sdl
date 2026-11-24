@@ -13,7 +13,13 @@ importPaths "source"
 # target are built with the matching ABI.
 libs "TKernel" "TKMath" "TKG2d" "TKG3d" "TKGeomBase" "TKGeomAlgo" \
      "TKBRep" "TKTopAlgo" "TKPrim" "TKBO" "TKBool" "TKFillet" "TKOffset" \
-     "TKXSBase" "TKDE" "TKDESTEP" "TKMesh"
+     "TKXSBase" "TKMesh"
+# OCCT 7.7 in Debian/Ubuntu splits Data Exchange differently from Homebrew
+# and vcpkg's 7.9 packages, which ship the aggregate TKDE/TKDESTEP libraries.
+libs "TKDE" "TKDESTEP" platform="osx"
+libs "TKDE" "TKDESTEP" platform="windows"
+libs "TKSTEP" "TKSTEPBase" "TKSTEPAttr" "TKSTEP209" \
+     "TKXDESTEP" "TKXDEIGES" platform="linux"
 libs "stdc++" platform="linux"
 libs "c++" platform="osx"
 lflags "-L/opt/homebrew/lib" "-rpath" "/opt/homebrew/lib" platform="osx"

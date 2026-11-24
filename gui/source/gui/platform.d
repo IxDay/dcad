@@ -96,10 +96,17 @@ public:
 }
 
 /// OCCT libraries required by both the host and the generated plugins.
-private enum string[] occtLibraries = [
+private enum string[] commonOcctLibraries = [
     "TKernel", "TKMath", "TKG2d", "TKG3d", "TKGeomBase", "TKGeomAlgo",
     "TKBRep", "TKTopAlgo", "TKPrim", "TKBO", "TKBool", "TKFillet",
-    "TKOffset", "TKXSBase", "TKDE", "TKDESTEP", "TKMesh"
+    "TKOffset", "TKXSBase", "TKMesh"
+];
+/// Homebrew and vcpkg ship aggregate Data Exchange libraries.
+private enum string[] bundledOcctExtras = ["TKDE", "TKDESTEP"];
+/// Debian/Ubuntu OCCT 7.7 splits the same functionality into step libraries.
+private enum string[] distroOcctExtras = [
+    "TKSTEP", "TKSTEPBase", "TKSTEPAttr", "TKSTEP209", "TKXDESTEP",
+    "TKXDEIGES"
 ];
 
 /**
@@ -116,7 +123,7 @@ string[] pluginLinkArgs(string repoRoot)
         args ~= "-L/LIBPATH:" ~ buildPath(repoRoot, "build");
         args ~= "-L/LIBPATH:C:\\dcad\\occt\\lib";
         args ~= "-Ldcad_shim.lib";
-        foreach (lib; occtLibraries)
+        foreach (lib; commonOcctLibraries ~ bundledOcctExtras)
             args ~= "-L" ~ lib ~ ".lib";
         auto core = buildPath(repoRoot, "dcad.lib");
         if (!exists(core)) core = buildPath(repoRoot, "libdcad.a");
@@ -130,7 +137,7 @@ string[] pluginLinkArgs(string repoRoot)
         args ~= "-L-rpath";
         args ~= "-L/opt/homebrew/lib";
         args ~= "-L-L/usr/local/lib";
-        foreach (lib; occtLibraries)
+        foreach (lib; commonOcctLibraries ~ bundledOcctExtras)
             args ~= "-L-l" ~ lib;
         args ~= "-L-lc++";
         args ~= buildPath(repoRoot, "libdcad.a");
@@ -139,7 +146,7 @@ string[] pluginLinkArgs(string repoRoot)
     {
         args ~= "-L-L" ~ buildPath(repoRoot, "build");
         args ~= "-L-ldcad_shim";
-        foreach (lib; occtLibraries)
+        foreach (lib; commonOcctLibraries ~ distroOcctExtras)
             args ~= "-L-l" ~ lib;
         args ~= "-L-lstdc++";
         args ~= buildPath(repoRoot, "libdcad.a");
