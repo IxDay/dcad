@@ -507,15 +507,6 @@ extern "C" int dcad_gui_begin_child(const char* id, float w, float h, int flags)
 }
 extern "C" void dcad_gui_end_child(void) { ImGui::EndChild(); }
 
-extern "C" int dcad_gui_begin_menu_bar(void) { return ImGui::BeginMenuBar() ? 1 : 0; }
-extern "C" void dcad_gui_end_menu_bar(void) { ImGui::EndMenuBar(); }
-extern "C" int dcad_gui_begin_menu(const char* label) { return ImGui::BeginMenu(label) ? 1 : 0; }
-extern "C" void dcad_gui_end_menu(void) { ImGui::EndMenu(); }
-extern "C" int dcad_gui_menu_item(const char* label, const char* shortcut, int selected, int enabled)
-{
-    return ImGui::MenuItem(label, shortcut, selected != 0, enabled != 0) ? 1 : 0;
-}
-
 extern "C" int dcad_gui_tree_node(const char* label, int* open)
 {
     ImGui::SetNextItemOpen(*open != 0, ImGuiCond_Always);

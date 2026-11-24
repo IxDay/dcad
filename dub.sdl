@@ -80,7 +80,8 @@ subPackage {
     libs "glfw" platform="osx"
     lflags "-L/opt/homebrew/lib" "-rpath" "/opt/homebrew/lib" platform="osx"
     lflags "-framework" "OpenGL" platform="osx"
-    extraDependencyFiles "gui/shim/dcad_gui_shim.cpp" "gui/tools/build-gui-shim.sh"
+    lflags "-framework" "Cocoa" platform="osx"
+    extraDependencyFiles "gui/shim/dcad_gui_shim.cpp" "gui/shim/dcad_native_menu.mm" "gui/tools/build-gui-shim.sh"
 }
 
 # Exercises the script host's body-style and module-style forms headlessly.

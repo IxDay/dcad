@@ -21,6 +21,7 @@ $VENDOR/backends/imgui_impl_glfw.cpp
 $VENDOR/backends/imgui_impl_opengl3.cpp
 $VENDOR/TextEditor.cpp
 $GUI/shim/dcad_gui_shim.cpp
+$GUI/shim/dcad_native_menu.mm
 "
 
 need_build=0
@@ -39,7 +40,8 @@ fi
 mkdir -p "$ROOT/build"
 OBJS=""
 for s in $SRCS; do
-    o="$ROOT/build/gui_$(basename "$s" .cpp).o"
+    b=$(basename "$s")
+    o="$ROOT/build/gui_${b%.*}.o"
     # Recompile object if source is newer.
     if [ ! -f "$o" ] || [ "$s" -nt "$o" ] || [ "$0" -nt "$o" ]; then
         echo "  CXX $(basename "$s")"

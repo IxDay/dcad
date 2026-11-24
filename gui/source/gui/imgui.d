@@ -25,6 +25,7 @@ enum int fixedPaneFlags = windowFlagsNoTitleBar | windowFlagsNoMove |
 enum int viewportPaneFlags = fixedPaneFlags | windowFlagsNoScrollbar |
                              windowFlagsNoScrollWithMouse;
 
+
 enum int condNone = 0;
 enum int condAlways = 1 << 0;
 enum int condOnce = 1 << 1;
@@ -100,13 +101,9 @@ extern(C) nothrow @nogc
     int  dcad_gui_begin_child(const(char)* id, float w, float h, int flags);
     void dcad_gui_end_child();
 
-    // menus
-    int  dcad_gui_begin_menu_bar();
-    void dcad_gui_end_menu_bar();
-    int  dcad_gui_begin_menu(const(char)* label);
-    void dcad_gui_end_menu();
-    int  dcad_gui_menu_item(const(char)* label, const(char)* shortcut,
-                            int selected, int enabled);
+    // Native macOS menu bar (AppKit bridge in dcad_native_menu.mm).
+    void dcad_install_native_shader_menu(void function(int) onSelect);
+
     int  dcad_gui_slider_float(const(char)* label, float* v,
                                float vmin, float vmax);
     int  dcad_gui_tree_node(const(char)* label, int* open);

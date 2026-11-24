@@ -20,10 +20,20 @@ import bindbc.glfw;
 import bindbc.opengl;
 
 import gui.imgui;
-import gui.viewport : Viewport;
+import gui.viewport : Viewport, ShaderMode;
 import gui.script_host : ScriptHost, RunResult;
 
 import dcad.shape : Shape;
+
+// The native macOS View > Shader menu calls back into D with a mode index.
+private Viewport g_menuViewport;
+
+extern(C) void dcad_shader_menu_callback(int mode)
+{
+    if (g_menuViewport is null) return;
+    g_menuViewport.setShaderMode(mode == 1 ? ShaderMode.wood
+                                           : ShaderMode.vscodeYellow);
+}
 
 // Startup opens a real, tracked script file. There is no hidden session file.
 private enum string defaultFile = "samples/coffee-table/table.d";
@@ -185,6 +195,10 @@ void main(string[] args)
     auto host = new ScriptHost(workDir, root);
     auto viewport = new Viewport();
     scope(exit) viewport.dispose(); // context is still current at scope exit
+
+    g_menuViewport = viewport;
+    scope(exit) g_menuViewport = null;
+    dcad_install_native_shader_menu(&dcad_shader_menu_callback);
 
     // Open a real project file, so the tab name is always truthful and Save
     // never needs a hidden scratch destination.

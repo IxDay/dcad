@@ -16,8 +16,13 @@ The window opens the real tracked file `samples/coffee-table/table.d` and
 renders it in your VS Code **Base16 Default Light** palette (`#f8f8f8` editor, `#f9f9f9` sidebar,
 `#383838` text, `#7cafc2` accents). The code editor uses D-aware syntax colours
 from the same theme, with D keywords and `@attribute` highlighting. The 3D
-preview uses an OpenSCAD-style renderer: near-white background, neutral
-light-grey shaded geometry, and the classic RGB axis cross and ground grid.
+preview uses an OpenSCAD-style renderer: near-white background, soft directional
+shading, and the classic RGB axis cross and ground grid. Select the surface
+shader from **View > Shader** in the macOS menu bar: **Default** uses the VS
+Code Base16 yellow (`#f7ca88`), and **Wood** reproduces the baked Lambert look
+of the joinery project's GLBs. The menu is a real AppKit `NSMenu` installed at
+startup (GLFW has no menu API); a C callback forwards the selection to the
+renderer. The app is macOS-only, so no cross-platform menu shim is involved.
 Edit the script, press **Cmd/Ctrl+Enter** (or click **Run**) to recompile and
 re-mesh.
 
@@ -45,6 +50,7 @@ clicking it opens the source module that builds that part.
 | Project tree | Expand/collapse folders; click a file to open it |
 | Parts list | Hover a part to highlight it; click to open its source `.d` file |
 | Animate | Play/pause and restart icons, full-width timeline (click/drag to scrub), `FPS`, `Steps` (animated scripts only) |
+| Shader | macOS menu bar: View > Shader > Default (VS Code yellow) / Wood (joints GLB) |
 
 The sidebar, editor and preview use a fixed 220px sidebar and a 3:2
 editor-to-preview split of the remaining width: they cannot be dragged, resized

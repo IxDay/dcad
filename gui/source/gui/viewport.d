@@ -7,6 +7,7 @@ module gui.viewport;
 
 import std.math : sin, cos, atan, sqrt, PI;
 import std.stdio : stderr;
+import std.string : toStringz;
 
 import bindbc.opengl;
 import gui.imgui : DcadMesh, dcad_mesh_shape, dcad_mesh_free;
@@ -107,6 +108,10 @@ void main()
 }
 VS";
 
+/// Selectable surface shading. Both programs share the vertex shader and the
+/// highlight tint; only the base colour / lighting term differs.
+enum ShaderMode { vscodeYellow, wood }
+
 private enum fragmentShaderSrc = q"FS
 #version 120
 varying vec3 vNormal;
@@ -116,14 +121,33 @@ void main()
     vec3 n = normalize(vNormal);
     vec3 light = normalize(vec3(0.4, 0.7, 1.0));
     float diff = max(dot(n, light), 0.0);
-    // OpenSCAD-style neutral light grey with soft, flat shading.
-    vec3 base = vec3(0.82, 0.85, 0.88);
+    // Base16 Default Light yellow (#f7ca88), the VS Code theme's yellow.
+    vec3 base = vec3(0.969, 0.792, 0.533);
     vec3 col = base * (0.68 + 0.32 * diff);
     if (uHighlight > 0.5)
     {
         // VS Code selection blue, kept readable against the light canvas.
         col = mix(col, vec3(0.29, 0.62, 0.80), 0.72) + 0.06 * diff;
     }
+    gl_FragColor = vec4(col, 1.0);
+}
+FS";
+
+/// The wood look baked into the joinery project's GLBs by tools/export.py:
+/// shade(n) = 0.60 + 0.53 * max(0, n . L), applied to the #e9c28c face colour
+/// in sRGB. glTF's L is Y-up; swap Y/Z for our Z-up CAD coordinates.
+private enum woodFragmentShaderSrc = q"FS
+#version 120
+varying vec3 vNormal;
+uniform float uHighlight;
+void main()
+{
+    vec3 n = normalize(vNormal);
+    vec3 light = vec3(-0.3948, 0.2818, 0.8745);
+    float k = min(1.0, 0.60 + 0.53 * max(dot(n, light), 0.0));
+    vec3 col = vec3(0.9137, 0.7608, 0.5490) * k;
+    if (uHighlight > 0.5)
+        col = mix(col, vec3(0.29, 0.62, 0.80), 0.72) + 0.06 * k;
     gl_FragColor = vec4(col, 1.0);
 }
 FS";
@@ -165,13 +189,14 @@ private:
     uint fbo;
     uint colorTex;
     uint depthRb;
-    uint program;
-    int projLoc;
-    int viewLoc;
-    int offsetLoc;
-    int highlightLoc;
-    int posLoc;
-    int normLoc;
+    uint[2] programs;
+    int[2] projLocs;
+    int[2] viewLocs;
+    int[2] offsetLocs;
+    int[2] highlightLocs;
+    int[2] posLocs;
+    int[2] normLocs;
+    ShaderMode shaderMode = ShaderMode.vscodeYellow;
     uint lineProgram;
     uint guideVbo;
     int lineProjLoc;
@@ -225,10 +250,11 @@ public:
         if (colorTex) glDeleteTextures(1, &colorTex);
         if (fbo) glDeleteFramebuffers(1, &fbo);
         glUseProgram(0);
-        if (program) glDeleteProgram(program);
+        foreach (p; programs) if (p) glDeleteProgram(p);
         if (lineProgram) glDeleteProgram(lineProgram);
         if (guideVbo) glDeleteBuffers(1, &guideVbo);
-        depthRb = colorTex = fbo = program = lineProgram = guideVbo = 0;
+        depthRb = colorTex = fbo = lineProgram = guideVbo = 0;
+        programs[] = 0;
     }
 
     /// The FBO colour texture, for display via ImGui::Image.
@@ -469,6 +495,9 @@ public:
     /// Index of the assembly part highlighted from the parts list (-1 = none).
     void setHighlightPart(int i) { highlightPart = i; }
 
+    /// Surface shading selected from the View > Shader menu.
+    void setShaderMode(ShaderMode mode) nothrow { shaderMode = mode; }
+
     /// Render into the FBO. `w`/`h` are in framebuffer pixels.
     void render(int w, int h)
     {
@@ -517,28 +546,29 @@ public:
             if (showAxes || showGrid)
                 drawGuides(proj, view);
 
-            glUseProgram(program);
-            glUniformMatrix4fv(projLoc, 1, GL_FALSE, proj.ptr);
-            glUniformMatrix4fv(viewLoc, 1, GL_FALSE, view.ptr);
+            immutable si = cast(int) shaderMode;
+            glUseProgram(programs[si]);
+            glUniformMatrix4fv(projLocs[si], 1, GL_FALSE, proj.ptr);
+            glUniformMatrix4fv(viewLocs[si], 1, GL_FALSE, view.ptr);
 
             if (wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
             if (mesh.vertexCount > 0)
             {
                 float[3] zero = [0f, 0f, 0f];
-                glUniform1f(highlightLoc, 0f);
-                drawMesh(mesh, zero);
+                glUniform1f(highlightLocs[si], 0f);
+                drawMesh(mesh, zero, si);
             }
             else
                 foreach (i, ref p; partMeshes)
                 {
-                    glUniform1f(highlightLoc,
+                    glUniform1f(highlightLocs[si],
                                 highlightPart == cast(int) i ? 1f : 0f);
-                    drawMesh(p, partOffsets[i]);
+                    drawMesh(p, partOffsets[i], si);
                 }
             if (wireframe) glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-            glDisableVertexAttribArray(posLoc);
-            glDisableVertexAttribArray(normLoc);
+            glDisableVertexAttribArray(posLocs[si]);
+            glDisableVertexAttribArray(normLocs[si]);
         }
 
         if (!diagnosticsDone)
@@ -570,29 +600,33 @@ private:
         glDisableVertexAttribArray(lineColorLoc);
     }
 
-    void drawMesh(ref MeshGpu g, ref float[3] off)
+    void drawMesh(ref MeshGpu g, ref float[3] off, int si)
     {
-        glUniform3f(offsetLoc, off[0], off[1], off[2]);
+        glUniform3f(offsetLocs[si], off[0], off[1], off[2]);
         glBindBuffer(GL_ARRAY_BUFFER, g.posVbo);
-        glVertexAttribPointer(posLoc, 3, GL_FLOAT, GL_FALSE, 0, null);
-        glEnableVertexAttribArray(posLoc);
+        glVertexAttribPointer(posLocs[si], 3, GL_FLOAT, GL_FALSE, 0, null);
+        glEnableVertexAttribArray(posLocs[si]);
         glBindBuffer(GL_ARRAY_BUFFER, g.normVbo);
-        glVertexAttribPointer(normLoc, 3, GL_FLOAT, GL_FALSE, 0, null);
-        glEnableVertexAttribArray(normLoc);
+        glVertexAttribPointer(normLocs[si], 3, GL_FLOAT, GL_FALSE, 0, null);
+        glEnableVertexAttribArray(normLocs[si]);
         glDrawArrays(GL_TRIANGLES, 0, g.vertexCount);
     }
 
     void initGL()
     {
-        program = createProgram(vertexShaderSrc, fragmentShaderSrc);
-        projLoc = glGetUniformLocation(program, "uProj");
-        viewLoc = glGetUniformLocation(program, "uView");
-        offsetLoc = glGetUniformLocation(program, "uOffset");
-        highlightLoc = glGetUniformLocation(program, "uHighlight");
-        posLoc = glGetAttribLocation(program, "aPosition");
-        normLoc = glGetAttribLocation(program, "aNormal");
-        stderr.writefln("viewport: program=%u proj=%d view=%d pos=%d norm=%d",
-                        program, projLoc, viewLoc, posLoc, normLoc);
+        foreach (i, src; [fragmentShaderSrc, woodFragmentShaderSrc])
+        {
+            programs[i] = createProgram(vertexShaderSrc, src.toStringz);
+            projLocs[i] = glGetUniformLocation(programs[i], "uProj");
+            viewLocs[i] = glGetUniformLocation(programs[i], "uView");
+            offsetLocs[i] = glGetUniformLocation(programs[i], "uOffset");
+            highlightLocs[i] = glGetUniformLocation(programs[i], "uHighlight");
+            posLocs[i] = glGetAttribLocation(programs[i], "aPosition");
+            normLocs[i] = glGetAttribLocation(programs[i], "aNormal");
+        }
+        stderr.writefln("viewport: shaders=%u,%u proj=%d,%d pos=%d,%d norm=%d,%d",
+                        programs[0], programs[1], projLocs[0], projLocs[1],
+                        posLocs[0], posLocs[1], normLocs[0], normLocs[1]);
         lineProgram = createProgram(lineVertexShaderSrc, lineFragmentShaderSrc);
         lineProjLoc = glGetUniformLocation(lineProgram, "uProj");
         lineViewLoc = glGetUniformLocation(lineProgram, "uView");
@@ -615,10 +649,11 @@ private:
                         glsl ? fromStringz(glsl) : "(null)");
 
         int linked;
-        glGetProgramiv(program, 0x8B82, &linked);   // GL_LINK_STATUS
+        auto activeProgram = programs[cast(int) shaderMode];
+        glGetProgramiv(activeProgram, 0x8B82, &linked);   // GL_LINK_STATUS
         char[2048] log = 0;
         int logLen;
-        glGetProgramInfoLog(program, log.length, &logLen, log.ptr);
+        glGetProgramInfoLog(activeProgram, log.length, &logLen, log.ptr);
         stderr.writefln("viewport: linked=%d log=%s", linked,
                         logLen > 0 ? fromStringz(log.ptr) : "(none)");
 
