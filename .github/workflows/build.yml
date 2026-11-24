@@ -7,7 +7,7 @@ on:
 
 # One job per requested target. Native runners are used throughout: there is
 # no cross-compilation on Linux/macOS, and the Windows ARM job uses MSVC's
-# ARM64 toolchain with an LDC wrapper that selects the aarch64 triple.
+# ARM64 toolchain with an LDC config that selects the aarch64 triple.
 jobs:
   build:
     name: ${{ matrix.name }}
@@ -114,9 +114,8 @@ jobs:
           mkdir -p /c/dcad/vcpkg-pin /c/dcad/vcpkg-overlay/ports
           curl -fsSL -o /c/dcad/vcpkg-pin/src.tar.gz \
             https://github.com/microsoft/vcpkg/archive/f5ced78107.tar.gz
-          tar -xzf /c/dcad/vcpkg-pin/src.tar.gz -C /c/dcad/vcpkg-pin
-          PINNED=$(find /c/dcad/vcpkg-pin -maxdepth 1 -type d -name 'vcpkg-*' | head -1)
-          cp -R "$PINNED/ports/opencascade" /c/dcad/vcpkg-overlay/ports/
+          tar -xzf /c/dcad/vcpkg-pin/src.tar.gz -C /c/dcad/vcpkg-pin --strip-components=1
+          cp -R /c/dcad/vcpkg-pin/ports/opencascade /c/dcad/vcpkg-overlay/ports/
           TRIPLET=x64-windows
           if [ "${{ matrix.name }}" = "windows-arm64" ]; then
             TRIPLET=arm64-windows
