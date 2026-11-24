@@ -114,7 +114,7 @@ string[] pluginLinkArgs(string repoRoot)
     {
         // CI (and the README recipe) stage vcpkg artifacts here.
         args ~= "-L/LIBPATH:" ~ buildPath(repoRoot, "build");
-        args ~= "-L/LIBPATH:C:/dcad/occt/lib";
+        args ~= "-L/LIBPATH:C:\\dcad\\occt\\lib";
         args ~= "-Ldcad_shim.lib";
         foreach (lib; occtLibraries)
             args ~= "-L" ~ lib ~ ".lib";
