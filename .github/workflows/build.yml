@@ -1,0 +1,130 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# One job per requested target. Native runners are used throughout: there is
+# no cross-compilation on Linux/macOS, and the Windows ARM job uses MSVC's
+# ARM64 toolchain with an LDC wrapper that selects the aarch64 triple.
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            runner: ubuntu-24.04
+            ldc: ldc2-1.43.0-linux-x86_64.tar.xz
+          - name: linux-aarch64
+            runner: ubuntu-24.04-arm
+            ldc: ldc2-1.43.0-linux-aarch64.tar.xz
+          - name: macos-x86_64
+            runner: macos-15-intel
+            ldc: ldc2-1.43.0-osx-x86_64.tar.xz
+          - name: macos-arm64
+            runner: macos-15
+            ldc: ldc2-1.43.0-osx-arm64.tar.xz
+          - name: windows-x86_64
+            runner: windows-2025
+            ldc: ldc2-1.43.0-windows-x64.7z
+          - name: windows-arm64
+            runner: windows-11-arm
+            ldc: ldc2-1.43.0-windows-x64.7z
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LDC (POSIX)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p "$RUNNER_TEMP/ldc"
+          curl -fsSL "https://github.com/ldc-developers/ldc/releases/download/v1.43.0/${{ matrix.ldc }}" \
+            | tar -xJ -C "$RUNNER_TEMP/ldc" --strip-components=1
+          echo "$RUNNER_TEMP/ldc/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/ldc/bin/ldc2" --version | head -3
+
+      - name: Install LDC and MSVC environment (Windows x86-64)
+        if: matrix.name == 'windows-x86_64'
+        run: |
+          mkdir -p /c/dcad/ldc
+          curl -fsSL -o /tmp/ldc.7z \
+            "https://github.com/ldc-developers/ldc/releases/download/v1.43.0/${{ matrix.ldc }}"
+          7z x /tmp/ldc.7z -o/c/dcad/ldc -y >/dev/null
+          LDC_ROOT=$(find /c/dcad/ldc -maxdepth 1 -type d -name 'ldc2-*' | head -1)
+          echo "$(cygpath -w "$LDC_ROOT/bin")" >> "$GITHUB_PATH"
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: matrix.name == 'windows-x86_64'
+
+      - name: Install LDC and ARM64 cross wrapper (Windows ARM)
+        if: matrix.name == 'windows-arm64'
+        run: |
+          mkdir -p /c/dcad/ldc /c/dcad/ldc-arm
+          curl -fsSL -o /tmp/ldc.7z \
+            "https://github.com/ldc-developers/ldc/releases/download/v1.43.0/${{ matrix.ldc }}"
+          7z x /tmp/ldc.7z -o/c/dcad/ldc -y >/dev/null
+          LDC_ROOT=$(find /c/dcad/ldc -maxdepth 1 -type d -name 'ldc2-*' | head -1)
+          LDC_EXE=$(cygpath -w "$LDC_ROOT/bin/ldc2.exe")
+          printf '@echo off\n"%s" -mtriple=aarch64-pc-windows-msvc %%*\n' \
+            "$LDC_EXE" > /c/dcad/ldc-arm/ldc2.bat
+          # Wrapper first so both dub and the script host's `ldc2` calls use it.
+          printf 'C:\\dcad\\ldc-arm\n%s\n' "$(cygpath -w "$LDC_ROOT/bin")" \
+            > "$GITHUB_PATH"
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        if: matrix.name == 'windows-arm64'
+        with:
+          arch: arm64
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libocct-dev libocct-ocaf-dev libglfw3-dev libgl1-mesa-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
+            g++
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install opencascade glfw
+
+      - name: Stage Windows OCCT and GLFW from vcpkg
+        if: runner.os == 'Windows'
+        run: |
+          VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT:-/c/vcpkg}
+          TRIPLET=x64-windows
+          if [ "${{ matrix.name }}" = "windows-arm64" ]; then
+            TRIPLET=arm64-windows
+          fi
+          "$VCPKG_ROOT/vcpkg" install "opencascade:$TRIPLET" "glfw3:$TRIPLET"
+          PREFIX="$VCPKG_ROOT/installed/$TRIPLET"
+          mkdir -p /c/dcad/occt/include /c/dcad/occt/lib /c/dcad/occt/bin
+          cp -r "$PREFIX/include/." /c/dcad/occt/include/
+          cp "$PREFIX/lib/"*.lib /c/dcad/occt/lib/
+          cp "$PREFIX/bin/"*.dll /c/dcad/occt/bin/
+          echo 'C:\dcad\occt\bin' >> "$GITHUB_PATH"
+          echo "DCAD_OCCT_INCLUDE=C:/dcad/occt/include/opencascade" >> "$GITHUB_ENV"
+
+      - name: Build and test
+        run: |
+          ldc2 --version | head -3
+          bash tests/run.sh
+          dub build :gui --force
+
+      - name: Upload GUI binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: dcad-gui-${{ matrix.name }}
+          path: |
+            dcad-gui
+            dcad-gui.exe
+          if-no-files-found: ignore

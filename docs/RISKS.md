@@ -85,12 +85,24 @@ it is either handled locally or needs a follow-up.
 
 ## Platform status
 
-The bindings were developed and tested on macOS ARM64 with LDC 1.43 and OCCT
-7.9.3. macOS and Linux both use the Itanium C++ ABI with Clang/LDC, so the
-mangled names are identical, but **the Linux path has not yet been executed**
-(the container daemon was unavailable in this session). The immediate
-follow-up is a CI job on Ubuntu with `libocct-dev` running both examples and
-diffing the STEP files.
+The bindings were developed on macOS ARM64 with LDC 1.43 and OCCT 7.9.3.
+macOS and Linux share the Itanium C++ ABI with Clang/LDC; Windows builds use
+the Microsoft ABI with MSVC-built OCCT (vcpkg). All six targets are built by
+`.github/workflows/build.yml`: Linux x86-64/aarch64, macOS x86/ARM, and
+Windows x86-64/ARM.
+
+The platform-specific pieces are:
+
+| Concern | POSIX | Windows |
+|---|---|---|
+| script plugin loading | `dlopen`/`dlsym` | `LoadLibrary`/`GetProcAddress` |
+| scratch dir id | `getpid` | `GetCurrentProcessId` |
+| C++ shim compiler | `clang++`/`g++` + `ar` | `cl` + `lib` |
+| native menu | AppKit (macOS) / Xlib (Linux) | Win32 `HMENU` |
+
+Windows ARM uses an LDC wrapper that selects `-mtriple=aarch64-pc-windows-msvc`
+together with MSVC's ARM64 libraries. OCCT versions still need to be kept in
+the 7.7–7.9 range; an OCCT 8.x ABI change would require updating the bindings.
 
 ## Recommendation on a shim layer after all
 

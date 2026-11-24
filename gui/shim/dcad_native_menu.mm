@@ -7,7 +7,9 @@
  */
 #import <AppKit/AppKit.h>
 
-extern "C" void dcad_install_native_shader_menu(void (*onSelect)(int));
+extern "C" void dcad_install_native_shader_menu(void* window, void* display,
+                                                 void (*onSelect)(int));
+extern "C" void dcad_native_menu_poll();
 
 namespace {
 void (*g_onSelect)(int) = nullptr;
@@ -37,8 +39,11 @@ void selectMode(int mode)
 - (void)selectWood:(id)sender    { (void)sender; selectMode(1); }
 @end
 
-extern "C" void dcad_install_native_shader_menu(void (*onSelect)(int))
+extern "C" void dcad_install_native_shader_menu(void* window, void* display,
+                                                 void (*onSelect)(int))
 {
+    (void)window;   // AppKit owns the menu bar, not the GLFW window
+    (void)display;
     g_onSelect = onSelect;
     NSApplication* app = [NSApplication sharedApplication];
 
@@ -88,4 +93,10 @@ extern "C" void dcad_install_native_shader_menu(void (*onSelect)(int))
 
     [app setMainMenu:mainMenu];
     selectMode(0);
+}
+
+extern "C" void dcad_native_menu_poll()
+{
+    // AppKit dispatches menu events through its own run loop, which GLFW
+    // already drives on macOS.
 }

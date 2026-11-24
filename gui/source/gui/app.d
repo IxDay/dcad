@@ -14,7 +14,8 @@ import std.string : toStringz, format, startsWith, endsWith;
 import std.algorithm.sorting : sort;
 import std.array : array;
 import std.conv : to;
-import core.sys.posix.unistd : getpid;
+
+import gui.platform : processId, nativeHandles;
 
 import bindbc.glfw;
 import bindbc.opengl;
@@ -25,7 +26,7 @@ import gui.script_host : ScriptHost, RunResult;
 
 import dcad.shape : Shape;
 
-// The native macOS View > Shader menu calls back into D with a mode index.
+// The native View > Shader menu calls back into D with a mode index.
 private Viewport g_menuViewport;
 
 extern(C) void dcad_shader_menu_callback(int mode)
@@ -188,7 +189,7 @@ void main(string[] args)
     dcad_textedit_set_light_palette(editor);
 
     // Hot-load artefacts live in the system temp dir, never in the repo.
-    immutable workDir = buildPath(tempDir(), "dcad-gui-" ~ getpid.to!string);
+    immutable workDir = buildPath(tempDir(), "dcad-gui-" ~ processId.to!string);
     mkdirRecurse(workDir);
 
     immutable root = repoRoot();
@@ -198,7 +199,9 @@ void main(string[] args)
 
     g_menuViewport = viewport;
     scope(exit) g_menuViewport = null;
-    dcad_install_native_shader_menu(&dcad_shader_menu_callback);
+    auto native = nativeHandles(cast(void*) window);
+    dcad_install_native_shader_menu(native.window, native.display,
+                                    &dcad_shader_menu_callback);
 
     // Open a real project file, so the tab name is always truthful and Save
     // never needs a hidden scratch destination.
@@ -361,6 +364,9 @@ void main(string[] args)
     // --- Main loop --------------------------------------------------------
     while (glfwWindowShouldClose(window) == 0)
     {
+        // X11 needs to drain events for the menu bar's own windows before
+        // GLFW polls; other platforms make this a no-op.
+        dcad_native_menu_poll();
         glfwPollEvents();
         dcad_gui_new_frame();
 

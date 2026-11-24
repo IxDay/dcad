@@ -42,8 +42,27 @@ dub build
 
 `dub.sdl` lists the OCCT libraries explicitly rather than relying on a
 pkg-config file, so the same recipe works with the distro packages and with
-Homebrew's OCCT. The shim build script tries the usual include locations;
-set `CXX=g++` on Linux if `clang++` is not installed.
+Homebrew's OCCT. The shim build script (`tools/build_shims.py`) tries the usual
+include locations; set `CXX=g++` on Linux if `clang++` is not installed, or
+`DCAD_OCCT_INCLUDE` to point at a custom OCCT prefix.
+
+### Supported targets
+
+| Target | OCCT source | C++ ABI | CI runner |
+|---|---|---|---|
+| Linux x86-64 | `libocct-dev` | Itanium | `ubuntu-24.04` |
+| Linux aarch64 | `libocct-dev` | Itanium | `ubuntu-24.04-arm` |
+| macOS x86-64 | Homebrew `opencascade` | Itanium | `macos-15-intel` |
+| macOS ARM64 | Homebrew `opencascade` | Itanium | `macos-15` |
+| Windows x86-64 | vcpkg `opencascade` | Microsoft | `windows-2025` |
+| Windows ARM64 | vcpkg `opencascade` | Microsoft | `windows-11-arm` |
+
+`.github/workflows/build.yml` builds and runs `tests/run.sh` on every target,
+then uploads each native `dcad-gui` binary as an artifact. On Windows the CI
+stages vcpkg's headers, `.lib` files and DLLs under `C:\dcad\occt\{include,lib,bin}`;
+to reproduce locally, install `opencascade` and `glfw3` with vcpkg and copy
+their artifacts to the same layout. Windows ARM64 uses an LDC wrapper that
+adds `-mtriple=aarch64-pc-windows-msvc` plus MSVC's ARM64 libraries.
 
 ## Example
 

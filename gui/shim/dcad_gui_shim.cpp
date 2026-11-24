@@ -21,6 +21,13 @@
 #else
 #include <GL/gl.h>
 #endif
+#ifdef _WIN32
+// The Windows SDK ships OpenGL 1.1 headers; ImGui's embedded loader provides
+// the rest, but GL_CLAMP_TO_EDGE is needed by the icon texture code here.
+#ifndef GL_CLAMP_TO_EDGE
+#define GL_CLAMP_TO_EDGE 0x812F
+#endif
+#endif
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 

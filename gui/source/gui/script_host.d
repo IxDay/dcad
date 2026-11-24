@@ -2,7 +2,8 @@
  * Script execution via hot-loaded D shared libraries.
  *
  * The editor text is D source. On Run it is wrapped in a tiny generated D
- * module, compiled with ldc2 into a .dylib, and loaded with dlopen. The
+ * module, compiled with ldc2 into a shared library, and loaded by the native
+ * dynamic loader. The
  * exported entry point returns a raw TopoDS_Shape*; the host wraps it in its
  * own Shape and meshes it. The previous plugin is unloaded first.
  *
@@ -23,7 +24,7 @@ import std.regex : ctRegex, matchFirst, replaceFirst;
 import std.algorithm.sorting : sort;
 import std.string : replace, toStringz, fromStringz;
 import std.conv : to;
-import core.sys.posix.dlfcn;
+import gui.platform : DynamicLibrary, sharedLibraryExtension, pluginLinkArgs;
 
 import dcad.shape : Shape;
 import dcad.occt.topology : TopoDS_Shape, dcad_shape_free;
@@ -315,7 +316,7 @@ private:
     string[] linkArgs;
     string[] importPaths;
     string[] extraSources;
-    void* handle;
+    DynamicLibrary lib;
     int generation;
 
 public:
@@ -351,7 +352,7 @@ public:
         immutable stem = "script_" ~ generation.to!string;
         generation++;
         immutable srcPath = buildPath(workDir, stem ~ ".d");
-        immutable dylibPath = buildPath(workDir, stem ~ ".dylib");
+        immutable dylibPath = buildPath(workDir, stem ~ sharedLibraryExtension());
         immutable objPath = buildPath(workDir, stem ~ ".o");
 
         // Two script forms share one plugin ABI:
@@ -372,8 +373,8 @@ public:
         write(srcPath, prelude ~ "\n"
               ~ (moduleForm ? moduleBodyEnd(modName) : source ~ "\n" ~ bodyEnd)
               ~ tail ~ "\n");
-        // Nothing generated is kept: the mapping survives unlinking on macOS,
-        // and dlclose() only needs the loaded handle, not the path.
+        // Nothing generated is kept: the mapping survives unlinking on POSIX,
+        // and closing the library only needs the loaded handle, not the path.
         scope(exit)
         {
             if (exists(srcPath)) remove(srcPath);
@@ -399,15 +400,15 @@ public:
             return RunResult(null, msg);
         }
 
-        handle = dlopen(dylibPath.toStringz, RTLD_NOW | RTLD_LOCAL);
-        if (handle is null)
-            return RunResult(null, "dlopen failed for " ~ dylibPath ~ "\n"
-                                   ~ cast(string) fromStringz(dlerror()));
+        string loadError;
+        lib = DynamicLibrary.open(dylibPath, loadError);
+        if (!lib.loaded)
+            return RunResult(null, loadError);
 
         alias RunFn = extern(C) void* function();
         alias ErrFn = extern(C) const(char)* function();
-        auto runFn = cast(RunFn) dlsym(handle, "dcad_script_run");
-        auto errFn = cast(ErrFn) dlsym(handle, "dcad_script_error");
+        auto runFn = cast(RunFn) lib.symbol("dcad_script_run");
+        auto errFn = cast(ErrFn) lib.symbol("dcad_script_error");
         if (runFn is null || errFn is null)
         {
             unload();
@@ -436,27 +437,27 @@ public:
 
     int animPartCount()
     {
-        if (handle is null) return 0;
+        if (!lib.loaded) return 0;
         alias Fn = extern(C) int function();
-        auto fn = cast(Fn) dlsym(handle, "dcad_anim_part_count");
+        auto fn = cast(Fn) lib.symbol("dcad_anim_part_count");
         return fn is null ? 0 : fn();
     }
 
     /// Raw pointer to a part shape; valid until the next run() unloads the plugin.
     const(void)* animPartShape(int i)
     {
-        if (handle is null) return null;
+        if (!lib.loaded) return null;
         alias Fn = extern(C) const(void)* function(int);
-        auto fn = cast(Fn) dlsym(handle, "dcad_anim_part_shape");
+        auto fn = cast(Fn) lib.symbol("dcad_anim_part_shape");
         return fn is null ? null : fn(i);
     }
 
     /// Display name for an animation part; valid until the next run().
     string animPartName(int i)
     {
-        if (handle is null) return null;
+        if (!lib.loaded) return null;
         alias Fn = extern(C) const(char)* function(int);
-        auto fn = cast(Fn) dlsym(handle, "dcad_anim_part_name");
+        auto fn = cast(Fn) lib.symbol("dcad_anim_part_name");
         if (fn is null) return null;
         auto p = fn(i);
         return p is null ? null : fromStringz(p).idup;
@@ -465,9 +466,9 @@ public:
     /// Stable id for an animation part, used to find its source module.
     string animPartId(int i)
     {
-        if (handle is null) return null;
+        if (!lib.loaded) return null;
         alias Fn = extern(C) const(char)* function(int);
-        auto fn = cast(Fn) dlsym(handle, "dcad_anim_part_id");
+        auto fn = cast(Fn) lib.symbol("dcad_anim_part_id");
         if (fn is null) return null;
         auto p = fn(i);
         return p is null ? null : fromStringz(p).idup;
@@ -476,9 +477,9 @@ public:
     /// 3 doubles (dx,dy,dz) per part at normalised time t.
     double[] animPose(double t, int count)
     {
-        if (handle is null || count <= 0) return null;
+        if (!lib.loaded || count <= 0) return null;
         alias Fn = extern(C) void function(double, double*);
-        auto fn = cast(Fn) dlsym(handle, "dcad_anim_pose");
+        auto fn = cast(Fn) lib.symbol("dcad_anim_pose");
         if (fn is null) return null;
         auto offsets = new double[count * 3];
         fn(t, offsets.ptr);
@@ -488,35 +489,21 @@ public:
 private:
     void unload()
     {
-        if (handle !is null)
+        if (lib.loaded)
         {
             // Free C-owned animation buffers while the plugin is still loaded.
             alias FreeFn = extern(C) void function();
-            auto freeFn = cast(FreeFn) dlsym(handle, "dcad_anim_free");
+            auto freeFn = cast(FreeFn) lib.symbol("dcad_anim_free");
             if (freeFn !is null) freeFn();
-            dlclose(handle);
-            handle = null;
+            lib.close();
         }
     }
 
     void buildLinkArgs()
     {
-        // OCCT libraries, mirroring dub.sdl so the plugin can instantiate
-        // shapes through the same static shim the host uses.
-        enum string[] occtLibs = [
-            "TKernel", "TKMath", "TKG2d", "TKG3d", "TKGeomBase", "TKGeomAlgo",
-            "TKBRep", "TKTopAlgo", "TKPrim", "TKBO", "TKBool", "TKFillet",
-            "TKOffset", "TKXSBase", "TKDE", "TKDESTEP", "TKMesh"
-        ];
-        linkArgs ~= "-L-L" ~ buildPath(repoRoot, "build");
-        linkArgs ~= "-L-ldcad_shim";
-        linkArgs ~= "-L-L/opt/homebrew/lib";
-        linkArgs ~= "-L-rpath";
-        linkArgs ~= "-L/opt/homebrew/lib";
-        foreach (lib; occtLibs)
-            linkArgs ~= "-L-l" ~ lib;
-        linkArgs ~= "-L-lc++";
-        linkArgs ~= buildPath(repoRoot, "libdcad.a");
+        // Mirrors the host's dub.sdl flags so a plugin can instantiate shapes
+        // through the same static shim and OCCT libraries.
+        linkArgs = pluginLinkArgs(repoRoot);
     }
 }
 

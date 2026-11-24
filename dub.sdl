@@ -8,22 +8,27 @@ targetType "library"
 sourcePaths "source"
 importPaths "source"
 
-# OpenCASCADE's C++ runtime and libraries. Linux first; the macOS settings
-# are only there so this repo can be developed on Apple Silicon too (same
-# Itanium C++ ABI, so the extern(C++) declarations are identical).
+# OpenCASCADE's C++ runtime and libraries. LDC uses the platform's native C++
+# ABI: Itanium on Linux/macOS, Microsoft on Windows. The OCCT packages for each
+# target are built with the matching ABI.
 libs "TKernel" "TKMath" "TKG2d" "TKG3d" "TKGeomBase" "TKGeomAlgo" \
      "TKBRep" "TKTopAlgo" "TKPrim" "TKBO" "TKBool" "TKFillet" "TKOffset" \
-     "TKXSBase" "TKDE" "TKDESTEP" "TKMesh" platform="posix"
+     "TKXSBase" "TKDE" "TKDESTEP" "TKMesh"
 libs "stdc++" platform="linux"
 libs "c++" platform="osx"
 lflags "-L/opt/homebrew/lib" "-rpath" "/opt/homebrew/lib" platform="osx"
 lflags "-L/usr/local/lib" platform="osx"
+# CI stages vcpkg's OCCT and GLFW artifacts here on Windows (see README).
+lflags "/LIBPATH:C:\\dcad\\occt\\lib" platform="windows"
 
 # The tiny C++ shim: only for API that extern(C++) cannot express
 # (OCCT inline accessors, Handle types, and C++ exception containment).
 preBuildCommands "$PACKAGE_DIR/tools/build-shim.sh" platform="posix"
+preBuildCommands "python $PACKAGE_DIR/tools/build_shims.py core" platform="windows"
 lflags "$PACKAGE_DIR/build/libdcad_shim.a" platform="posix"
-extraDependencyFiles "shim/dcad_shim.cpp" "shim/dcad_shim.h" "tools/build-shim.sh"
+lflags "$PACKAGE_DIR/build/dcad_shim.lib" platform="windows"
+extraDependencyFiles "shim/dcad_shim.cpp" "shim/dcad_shim.h" \
+                     "tools/build-shim.sh" "tools/build_shims.py"
 
 subPackage {
     name "simple-box"
@@ -75,13 +80,21 @@ subPackage {
     dependency "bindbc-opengl" version="~>1.1"
     versions "GL_30"
 
-    preBuildCommands "$PACKAGE_DIR/gui/tools/build-gui-shim.sh" platform="osx"
-    lflags "$PACKAGE_DIR/build/libdcad_gui_shim.a" platform="osx"
+    preBuildCommands "$PACKAGE_DIR/gui/tools/build-gui-shim.sh" platform="posix"
+    preBuildCommands "python $PACKAGE_DIR/tools/build_shims.py gui" platform="windows"
+    lflags "$PACKAGE_DIR/build/libdcad_gui_shim.a" platform="posix"
+    lflags "$PACKAGE_DIR/build/dcad_gui_shim.lib" platform="windows"
     libs "glfw" platform="osx"
+    libs "glfw" "GL" "X11" platform="linux"
+    libs "glfw3" "opengl32" "user32" "gdi32" platform="windows"
     lflags "-L/opt/homebrew/lib" "-rpath" "/opt/homebrew/lib" platform="osx"
     lflags "-framework" "OpenGL" platform="osx"
     lflags "-framework" "Cocoa" platform="osx"
-    extraDependencyFiles "gui/shim/dcad_gui_shim.cpp" "gui/shim/dcad_native_menu.mm" "gui/tools/build-gui-shim.sh"
+    extraDependencyFiles "gui/shim/dcad_gui_shim.cpp" \
+                         "gui/shim/dcad_native_menu.mm" \
+                         "gui/shim/dcad_native_menu_win.cpp" \
+                         "gui/shim/dcad_native_menu_x11.cpp" \
+                         "gui/tools/build-gui-shim.sh" "tools/build_shims.py"
 }
 
 # Exercises the script host's body-style and module-style forms headlessly.

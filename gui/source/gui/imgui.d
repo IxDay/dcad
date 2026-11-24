@@ -101,8 +101,11 @@ extern(C) nothrow @nogc
     int  dcad_gui_begin_child(const(char)* id, float w, float h, int flags);
     void dcad_gui_end_child();
 
-    // Native macOS menu bar (AppKit bridge in dcad_native_menu.mm).
-    void dcad_install_native_shader_menu(void function(int) onSelect);
+    // Native menu bar: AppKit on macOS, Win32 on Windows, X11 on Linux.
+    // GLFW has no menu API, so each platform supplies its own bridge.
+    void dcad_install_native_shader_menu(void* window, void* display,
+                                         void function(int) onSelect);
+    void dcad_native_menu_poll();
 
     int  dcad_gui_slider_float(const(char)* label, float* v,
                                float vmin, float vmax);

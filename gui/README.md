@@ -18,11 +18,12 @@ renders it in your VS Code **Base16 Default Light** palette (`#f8f8f8` editor, `
 from the same theme, with D keywords and `@attribute` highlighting. The 3D
 preview uses an OpenSCAD-style renderer: near-white background, soft directional
 shading, and the classic RGB axis cross and ground grid. Select the surface
-shader from **View > Shader** in the macOS menu bar: **Default** uses the VS
+shader from **View > Shader** in the native menu bar: **Default** uses the VS
 Code Base16 yellow (`#f7ca88`), and **Wood** reproduces the baked Lambert look
-of the joinery project's GLBs. The menu is a real AppKit `NSMenu` installed at
-startup (GLFW has no menu API); a C callback forwards the selection to the
-renderer. The app is macOS-only, so no cross-platform menu shim is involved.
+of the joinery project's GLBs. GLFW has no menu API, so each platform supplies
+its own bridge: an AppKit `NSMenu` on macOS, a Win32 `HMENU` on Windows, and a
+small Xlib menu bar on Linux. All three forward the selection to the renderer
+through the same C callback.
 Edit the script, press **Cmd/Ctrl+Enter** (or click **Run**) to recompile and
 re-mesh.
 
@@ -50,7 +51,7 @@ clicking it opens the source module that builds that part.
 | Project tree | Expand/collapse folders; click a file to open it |
 | Parts list | Hover a part to highlight it; click to open its source `.d` file |
 | Animate | Play/pause and restart icons, full-width timeline (click/drag to scrub), `FPS`, `Steps` (animated scripts only) |
-| Shader | macOS menu bar: View > Shader > Default (VS Code yellow) / Wood (joints GLB) |
+| Shader | Native menu bar: View > Shader > Default (VS Code yellow) / Wood (joints GLB) |
 
 The sidebar, editor and preview use a fixed 220px sidebar and a 3:2
 editor-to-preview split of the remaining width: they cannot be dragged, resized
@@ -174,8 +175,11 @@ the full language and kernel API available. The tradeoff is ~1–2 s compile tim
 per Run — fine for a manual keybind, too slow for per-keystroke auto-run. The
 alternative, an embedded interpreter, would re-run instantly but would require
 a custom parser and a restricted subset of the DSL. Both D classes and OCCT
-shape pointers cross the plugin boundary safely on macOS/ARM64 with LDC 1.43
-(verified: GC allocations, exceptions, and cloned `TopoDS_Shape` handles).
+shape pointers cross the plugin boundary safely with LDC 1.43 (verified on
+macOS/ARM64: GC allocations, exceptions, and cloned `TopoDS_Shape` handles).
+Dynamic loading, plugin link flags and the scratch-directory id are isolated in
+`gui/source/gui/platform.d`; Windows uses `LoadLibrary`/`GetProcAddress` while
+POSIX uses `dlopen`/`dlsym`.
 
 ## Architecture
 
