@@ -113,4 +113,6 @@ subPackage {
     mainSourceFile "tests/script-host-smoke/main.d"
     importPaths "gui/source" "source"
     dependency "dcad" version="*"
+    # platform.d declares GLFW's native-handle accessors on every OS.
+    libs "glfw3_mt" "opengl32" "user32" "gdi32" platform="windows"
 }
