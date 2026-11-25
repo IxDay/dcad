@@ -15,7 +15,7 @@ libs "TKernel" "TKMath" "TKG2d" "TKG3d" "TKGeomBase" "TKGeomAlgo" \
      "TKBRep" "TKTopAlgo" "TKPrim" "TKBO" "TKBool" "TKFillet" "TKOffset" \
      "TKXSBase" "TKMesh"
 # OCCT 7.7 in Debian/Ubuntu splits Data Exchange differently from Homebrew
-# and vcpkg's 7.9 packages, which ship the aggregate TKDE/TKDESTEP libraries.
+# and the official 7.9 MSVC packages, which ship aggregate TKDE/TKDESTEP.
 libs "TKDE" "TKDESTEP" platform="osx"
 libs "TKDE" "TKDESTEP" platform="windows"
 libs "TKSTEP" "TKSTEPBase" "TKSTEPAttr" "TKSTEP209" \
@@ -24,7 +24,7 @@ libs "stdc++" platform="linux"
 libs "c++" platform="osx"
 lflags "-L/opt/homebrew/lib" "-rpath" "/opt/homebrew/lib" platform="osx"
 lflags "-L/usr/local/lib" platform="osx"
-# CI stages vcpkg's OCCT and GLFW artifacts here on Windows (see README).
+# CI stages the official OCCT and GLFW binaries here on Windows (see README).
 lflags "/LIBPATH:C:\\dcad\\occt\\lib" platform="windows"
 
 # The tiny C++ shim: only for API that extern(C++) cannot express

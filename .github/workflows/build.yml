@@ -5,9 +5,8 @@ on:
   pull_request:
   workflow_dispatch:
 
-# One job per requested target. Native runners are used throughout: there is
-# no cross-compilation on Linux/macOS, and the Windows ARM job uses MSVC's
-# ARM64 toolchain with an LDC config that selects the aarch64 triple.
+# One job per supported target. All builds are native: LDC has no Windows
+# ARM64 toolchain, so a Windows ARM64 job cannot link against an ARM D runtime.
 jobs:
   build:
     name: ${{ matrix.name }}
@@ -31,9 +30,6 @@ jobs:
           - name: windows-x86_64
             runner: windows-2025
             ldc: ldc2-1.43.0-windows-x64.7z
-          - name: windows-arm64
-            runner: windows-11-arm
-            ldc: ldc2-1.43.0-windows-x64.7z
 
     defaults:
       run:
@@ -52,7 +48,7 @@ jobs:
           "$RUNNER_TEMP/ldc/bin/ldc2" --version
 
       - name: Install LDC and MSVC environment (Windows x86-64)
-        if: matrix.name == 'windows-x86_64'
+        if: runner.os == 'Windows'
         run: |
           mkdir -p /c/dcad/ldc
           curl -fsSL -o /tmp/ldc.7z \
@@ -62,31 +58,7 @@ jobs:
           echo "$(cygpath -w "$LDC_ROOT/bin")" >> "$GITHUB_PATH"
 
       - uses: ilammy/msvc-dev-cmd@v1
-        if: matrix.name == 'windows-x86_64'
-
-      - name: Install LDC and ARM64 cross config (Windows ARM)
-        if: matrix.name == 'windows-arm64'
-        run: |
-          mkdir -p /c/dcad/ldc "$USERPROFILE/.ldc"
-          curl -fsSL -o /tmp/ldc.7z \
-            "https://github.com/ldc-developers/ldc/releases/download/v1.43.0/${{ matrix.ldc }}"
-          7z x /tmp/ldc.7z -o/c/dcad/ldc -y >/dev/null
-          LDC_ROOT=$(find /c/dcad/ldc -maxdepth 1 -type d -name 'ldc2-*' | head -1)
-          echo "$(cygpath -w "$LDC_ROOT/bin")" >> "$GITHUB_PATH"
-          # A config file is seen by every ldc2 invocation, including the
-          # script host's `execute(["ldc2", ...])`, unlike a .bat wrapper.
-          cat > "$USERPROFILE/.ldc/ldc2.conf" <<'EOF'
-          "default": {
-              switches = [
-                  "-mtriple=aarch64-pc-windows-msvc",
-              ];
-          }
-          EOF
-
-      - uses: ilammy/msvc-dev-cmd@v1
-        if: matrix.name == 'windows-arm64'
-        with:
-          arch: arm64
+        if: runner.os == 'Windows'
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -103,35 +75,35 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install opencascade glfw
 
-      - name: Stage Windows OCCT and GLFW from vcpkg
+      # Prebuilt MSVC binaries avoid a 1h+ OCCT source build on hosted runners.
+      # Both archives use the stable Microsoft C++ ABI that LDC targets.
+      - name: Stage prebuilt OCCT and GLFW (Windows)
         if: runner.os == 'Windows'
         run: |
-          VCPKG_ROOT=${VCPKG_INSTALLATION_ROOT:-/c/vcpkg}
-          VCPKG_ROOT=$(cygpath -u "$VCPKG_ROOT" 2>/dev/null || echo "$VCPKG_ROOT")
-          # dcad's bindings target OCCT 7.7-7.9; current vcpkg ships OCCT 8.x.
-          # Overlay just that one port from the 7.9.3-era tree, keeping the
-          # runner's current vcpkg executable and tool data files.
-          mkdir -p /c/dcad/vcpkg-pin /c/dcad/vcpkg-overlay/ports
-          curl -fsSL -o /c/dcad/vcpkg-pin/src.tar.gz \
-            https://github.com/microsoft/vcpkg/archive/f5ced78107.tar.gz
-          tar -xzf /c/dcad/vcpkg-pin/src.tar.gz -C /c/dcad/vcpkg-pin --strip-components=1
-          cp -R /c/dcad/vcpkg-pin/ports/opencascade /c/dcad/vcpkg-overlay/ports/
-          TRIPLET=x64-windows
-          if [ "${{ matrix.name }}" = "windows-arm64" ]; then
-            TRIPLET=arm64-windows
-          fi
-          "$VCPKG_ROOT/vcpkg" install \
-            --overlay-ports=/c/dcad/vcpkg-overlay/ports \
-            "opencascade:$TRIPLET" "glfw3:$TRIPLET"
-          PREFIX="$VCPKG_ROOT/installed/$TRIPLET"
-          mkdir -p /c/dcad/occt/include /c/dcad/occt/lib /c/dcad/occt/bin
-          cp -r "$PREFIX/include/." /c/dcad/occt/include/
-          cp "$PREFIX/lib/"*.lib /c/dcad/occt/lib/
-          cp "$PREFIX/bin/"*.dll /c/dcad/occt/bin/
+          set -eu
+          mkdir -p /c/dcad/occt/include/opencascade /c/dcad/occt/lib \
+                   /c/dcad/occt/bin /c/dcad/deps
+          curl -fsSL -o /c/dcad/deps/occt.zip \
+            https://github.com/Open-Cascade-SAS/OCCT/releases/download/V7_9_3/opencascade-7.9.3-vc14-64.zip
+          unzip -q /c/dcad/deps/occt.zip -d /c/dcad/deps
+          OCCT=/c/dcad/deps/opencascade-7.9.3-vc14-64
+          cp -R "$OCCT/inc/." /c/dcad/occt/include/opencascade/
+          cp "$OCCT/win64/vc14/lib/"*.lib /c/dcad/occt/lib/
+          cp "$OCCT/win64/vc14/bin/"*.dll /c/dcad/occt/bin/
+
+          curl -fsSL -o /c/dcad/deps/glfw.zip \
+            https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.bin.WIN64.zip
+          unzip -q /c/dcad/deps/glfw.zip -d /c/dcad/deps
+          GLFW=/c/dcad/deps/glfw-3.4.bin.WIN64
+          cp -R "$GLFW/include/GLFW" /c/dcad/occt/include/
+          cp "$GLFW/lib-vc2022/glfw3.lib" /c/dcad/occt/lib/
+
           echo 'C:\dcad\occt\bin' >> "$GITHUB_PATH"
           echo "DCAD_OCCT_INCLUDE=C:/dcad/occt/include/opencascade" >> "$GITHUB_ENV"
 
       - name: Build and test
+        env:
+          DCAD_BUILD_TYPE: release
         run: |
           ldc2 --version
           bash tests/run.sh

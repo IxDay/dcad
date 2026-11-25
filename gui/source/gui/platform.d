@@ -101,7 +101,7 @@ private enum string[] commonOcctLibraries = [
     "TKBRep", "TKTopAlgo", "TKPrim", "TKBO", "TKBool", "TKFillet",
     "TKOffset", "TKXSBase", "TKMesh"
 ];
-/// Homebrew and vcpkg ship aggregate Data Exchange libraries.
+/// Homebrew and the official MSVC package ship aggregate Data Exchange libs.
 private enum string[] bundledOcctExtras = ["TKDE", "TKDESTEP"];
 /// Debian/Ubuntu OCCT 7.7 splits the same functionality into step libraries.
 private enum string[] distroOcctExtras = [
@@ -119,7 +119,7 @@ string[] pluginLinkArgs(string repoRoot)
     string[] args;
     version (Windows)
     {
-        // CI (and the README recipe) stage vcpkg artifacts here.
+        // CI (and the README recipe) stage prebuilt artifacts here.
         args ~= "-L/LIBPATH:" ~ buildPath(repoRoot, "build");
         args ~= "-L/LIBPATH:C:\\dcad\\occt\\lib";
         args ~= "-Ldcad_shim.lib";

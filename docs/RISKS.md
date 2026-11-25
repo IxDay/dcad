@@ -86,10 +86,11 @@ it is either handled locally or needs a follow-up.
 ## Platform status
 
 The bindings were developed on macOS ARM64 with LDC 1.43 and OCCT 7.9.3.
-macOS and Linux share the Itanium C++ ABI with Clang/LDC; Windows builds use
-the Microsoft ABI with MSVC-built OCCT (vcpkg). All six targets are built by
+macOS and Linux share the Itanium C++ ABI with Clang/LDC; Windows uses the
+Microsoft ABI with MSVC-built OCCT. Five targets are built by
 `.github/workflows/build.yml`: Linux x86-64/aarch64, macOS x86/ARM, and
-Windows x86-64/ARM.
+Windows x86-64. Windows ARM64 is excluded because LDC has no Windows ARM64
+toolchain or runtime libraries.
 
 The platform-specific pieces are:
 
@@ -100,9 +101,8 @@ The platform-specific pieces are:
 | C++ shim compiler | `clang++`/`g++` + `ar` | `cl` + `lib` |
 | native menu | AppKit (macOS) / Xlib (Linux) | Win32 `HMENU` |
 
-Windows ARM uses an LDC wrapper that selects `-mtriple=aarch64-pc-windows-msvc`
-together with MSVC's ARM64 libraries. OCCT versions still need to be kept in
-the 7.7–7.9 range; an OCCT 8.x ABI change would require updating the bindings.
+OCCT versions still need to be kept in the 7.7–7.9 range; an OCCT 8.x ABI
+change would require updating the bindings.
 
 ## Recommendation on a shim layer after all
 

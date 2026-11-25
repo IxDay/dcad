@@ -54,18 +54,22 @@ include locations; set `CXX=g++` on Linux if `clang++` is not installed, or
 | Linux aarch64 | `libocct-dev` | Itanium | `ubuntu-24.04-arm` |
 | macOS x86-64 | Homebrew `opencascade` | Itanium | `macos-15-intel` |
 | macOS ARM64 | Homebrew `opencascade` | Itanium | `macos-15` |
-| Windows x86-64 | vcpkg `opencascade` | Microsoft | `windows-2025` |
-| Windows ARM64 | vcpkg `opencascade` | Microsoft | `windows-11-arm` |
+| Windows x86-64 | official OCCT 7.9.3 binaries | Microsoft | `windows-2025` |
 
-`.github/workflows/build.yml` builds and runs `tests/run.sh` on every target and
-packages a native archive (binary, GUI assets and sample scripts) per target.
+`.github/workflows/build.yml` builds and runs `tests/run.sh` on every target in
+release mode (`DCAD_BUILD_TYPE=release`; local runs default to dub's debug
+build) and packages a native archive (release binary, GUI assets and sample
+scripts) per target.
 Pushing a tag also publishes those archives as a GitHub Release. On Windows the
-CI stages vcpkg's headers, `.lib` files and DLLs under
-`C:\dcad\occt\{include,lib,bin}`; to reproduce locally, install `opencascade`
-7.9.x (current vcpkg ships 8.x, which the bindings do not target yet) and
-`glfw3`, then copy their artifacts to the same layout. Windows ARM64 uses an
-LDC config file that adds `-mtriple=aarch64-pc-windows-msvc` plus MSVC's ARM64
-libraries.
+CI downloads the official OCCT 7.9.3 `vc14-64` archive and GLFW 3.4's prebuilt
+WIN64 binaries, then stages headers, `.lib` files and DLLs under
+`C:\dcad\occt\{include,lib,bin}`. To reproduce locally, use the same archives
+(or an OCCT 7.7–7.9 MSVC build; current vcpkg ships 8.x, which the bindings do
+not target yet).
+
+Windows ARM64 is not supported: LDC 1.43 publishes only x86/x64 Windows
+toolchains, so cross-compiling with `-mtriple=aarch64-pc-windows-msvc` cannot
+link against ARM64 druntime/phobos libraries.
 
 ## Example
 
