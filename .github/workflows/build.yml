@@ -91,6 +91,16 @@ jobs:
           cp "$OCCT/win64/vc14/lib/"*.lib /c/dcad/occt/lib/
           cp "$OCCT/win64/vc14/bin/"*.dll /c/dcad/occt/bin/
 
+          # TKernel.dll imports these from OCCT's separate 3rdparty package.
+          curl -fsSL -o /c/dcad/deps/occt3p.zip \
+            https://github.com/Open-Cascade-SAS/OCCT/releases/download/V7_9_3/3rdparty-vc14-64.zip
+          unzip -q /c/dcad/deps/occt3p.zip \
+            '3rdparty-vc14-64/jemalloc-vc14-64/bin/jemalloc.dll' \
+            '3rdparty-vc14-64/tbb-2021.13.0-x64/bin/tbb12.dll' \
+            -d /c/dcad/deps
+          cp /c/dcad/deps/3rdparty-vc14-64/jemalloc-vc14-64/bin/jemalloc.dll /c/dcad/occt/bin/
+          cp /c/dcad/deps/3rdparty-vc14-64/tbb-2021.13.0-x64/bin/tbb12.dll /c/dcad/occt/bin/
+
           curl -fsSL -o /c/dcad/deps/glfw.zip \
             https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.bin.WIN64.zip
           unzip -q /c/dcad/deps/glfw.zip -d /c/dcad/deps
