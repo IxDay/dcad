@@ -383,8 +383,16 @@ public:
             if (exists(dylibPath)) remove(dylibPath);
         }
 
-        string[] cmd = ["ldc2", "-shared", "-relocation-model=pic",
-                        "-I", buildPath(repoRoot, "source")];
+        string[] cmd = ["ldc2", "-shared", "-relocation-model=pic"];
+        version (Windows)
+        {
+            // -shared normally implies -link-defaultlib-shared, which expects
+            // a DLL copy of druntime/Phobos and leaves D TypeInfo symbols in
+            // the core library unresolved. The host and shims use the static
+            // MSVC CRT, so build plugins against the static D runtime too.
+            cmd ~= "-link-defaultlib-shared=false";
+        }
+        cmd ~= ["-I", buildPath(repoRoot, "source")];
         foreach (p; importPaths)
             cmd ~= ["-I", p];
         cmd ~= linkArgs;
