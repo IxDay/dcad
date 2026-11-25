@@ -55,9 +55,10 @@ const(ubyte)[] payloadBytes()
     {
         auto module_ = GetModuleHandleA(null);
         if (module_ is null) return null;
-        // MAKEINTRESOURCE(1): the low word is the integer id, not text "1".
+        // MAKEINTRESOURCE(1) for the id and RT_RCDATA (10) for the type:
+        // both are integer values, not the strings "1" and "RCDATA".
         auto resource = FindResourceA(module_, cast(const(char)*) 1,
-                                      "RCDATA".toStringz);
+                                      cast(const(char)*) 10);
         if (resource is null) return null;
         immutable size = SizeofResource(module_, resource);
         if (size == 0) return null;
