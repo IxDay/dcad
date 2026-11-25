@@ -62,9 +62,10 @@ build) and packages a native archive (release binary, GUI assets and sample
 scripts) per target.
 Pushing a tag also publishes those archives as a GitHub Release. On Windows the
 CI downloads the official OCCT 7.9.3 `vc14-64` archive, its matching `3rdparty`
-archive (`jemalloc.dll` and `tbb12.dll` are needed by `TKernel.dll`), and GLFW
-3.4's prebuilt WIN64 binaries, then stages headers, `.lib` files and DLLs under
-`C:\dcad\occt\{include,lib,bin}`. To reproduce locally, use the same archives
+archive (for `TKernel`'s jemalloc/TBB and the media/image dependencies reached
+via `TKDESTEP`), and GLFW 3.4's prebuilt WIN64 binaries. Headers, `.lib` files
+and DLLs are staged under `C:\dcad\occt\{include,lib,bin}`. To reproduce
+locally, use the same archives
 (or an OCCT 7.7–7.9 MSVC build; current vcpkg ships 8.x, which the bindings do
 not target yet).
 

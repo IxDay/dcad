@@ -91,15 +91,27 @@ jobs:
           cp "$OCCT/win64/vc14/lib/"*.lib /c/dcad/occt/lib/
           cp "$OCCT/win64/vc14/bin/"*.dll /c/dcad/occt/bin/
 
-          # TKernel.dll imports these from OCCT's separate 3rdparty package.
+          # OCCT's DLLs import these from its separate 3rdparty package. The
+          # list is the transitive closure for the libraries dcad links, not
+          # the full archive (which also contains Qt/VTK/Tcl tooling).
+          THIRDPARTY="
+            3rdparty-vc14-64/jemalloc-vc14-64/bin/jemalloc.dll
+            3rdparty-vc14-64/tbb-2021.13.0-x64/bin/tbb12.dll
+            3rdparty-vc14-64/ffmpeg-3.3.4-64/bin/avcodec-57.dll
+            3rdparty-vc14-64/ffmpeg-3.3.4-64/bin/avformat-57.dll
+            3rdparty-vc14-64/ffmpeg-3.3.4-64/bin/avutil-55.dll
+            3rdparty-vc14-64/ffmpeg-3.3.4-64/bin/swscale-4.dll
+            3rdparty-vc14-64/freeimage-3.18.0-x64/bin/FreeImage.dll
+            3rdparty-vc14-64/freetype-2.13.3-x64/bin/freetype.dll
+            3rdparty-vc14-64/openvr-1.14.15-64/bin/win64/openvr_api.dll
+            3rdparty-vc14-64/msvc-vc14-64/vcomp140.dll
+          "
           curl -fsSL -o /c/dcad/deps/occt3p.zip \
             https://github.com/Open-Cascade-SAS/OCCT/releases/download/V7_9_3/3rdparty-vc14-64.zip
-          unzip -q /c/dcad/deps/occt3p.zip \
-            '3rdparty-vc14-64/jemalloc-vc14-64/bin/jemalloc.dll' \
-            '3rdparty-vc14-64/tbb-2021.13.0-x64/bin/tbb12.dll' \
-            -d /c/dcad/deps
-          cp /c/dcad/deps/3rdparty-vc14-64/jemalloc-vc14-64/bin/jemalloc.dll /c/dcad/occt/bin/
-          cp /c/dcad/deps/3rdparty-vc14-64/tbb-2021.13.0-x64/bin/tbb12.dll /c/dcad/occt/bin/
+          unzip -q /c/dcad/deps/occt3p.zip $THIRDPARTY -d /c/dcad/deps
+          for dll in $THIRDPARTY; do
+            cp "/c/dcad/deps/$dll" /c/dcad/occt/bin/
+          done
 
           curl -fsSL -o /c/dcad/deps/glfw.zip \
             https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.bin.WIN64.zip
