@@ -23,4 +23,28 @@ done
 test "$(ls table/*.step | wc -l | tr -d ' ')" = 18
 grep -q '"tracks"' table/animation.json
 
-echo "PASS: bindings, examples, 18-part coffee table, GUI build and script forms"
+# Release builds also produce the self-extracting binary that ships to users.
+# It embeds the linked GUI, the project template, the D SDK and (where the
+# platform provides them) OCCT/GLFW libraries.
+if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
+    if [ "$(uname -s)" = "Darwin" ]; then
+        # Point the already-linked inner GUI at the dylibs unpacked beside it.
+        python3 tools/relocate_macos.py
+    fi
+    dub build :gui-launcher "$BUILD_FLAG"
+
+    if [ -x ./dcad-launcher ]; then
+        ROOT=$(./dcad-launcher --print-root)
+    else
+        ROOT=$(./dcad-launcher.exe --print-root)
+    fi
+    test -f "$ROOT/dcad-gui" || test -f "$ROOT/dcad-gui.exe"
+    test -f "$ROOT/project-template/daimochi/dcad.json"
+    test -f "$ROOT/libdcad.a" || test -f "$ROOT/dcad.lib"
+    test -d "$ROOT/assets/icons"
+    test -d "$ROOT/samples/coffee-table"
+    test -d "$ROOT/source"
+    echo "PASS: embedded launcher payload and project template"
+fi
+
+echo "PASS: bindings, examples, 18-part coffee table, GUI, script forms and new project"

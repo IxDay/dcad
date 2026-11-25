@@ -17,6 +17,7 @@ shim/                 ~150 lines of C++ for the gaps extern(C++) cannot express
 examples/             acceptance examples
 samples/              standalone models (coffee-table)
 gui/                  native GUI shell (editor + 3D preview)
+project-template/     files created by File > New Project
 docs/                 scope, risks, Phase 3 design, output formats
 ```
 
@@ -31,6 +32,11 @@ dub run :loft                  # writes loft.step
 dub run :coffee-table          # writes samples/coffee-table/table/*.step
 dub run :gui                   # native editor + 3D preview (needs glfw)
 ./tests/run.sh                 # acceptance check for all of the above
+
+# Self-contained release binary: build :gui first, then embed it.
+dub build :gui --build=release
+python3 tools/relocate_macos.py  # macOS only; resolves bundled dylibs via @rpath
+DCAD_EMBED_RESOURCES=1 dub build :gui-launcher --build=release
 ```
 
 For a Debian/Ubuntu Linux target:
@@ -58,11 +64,14 @@ include locations; set `CXX=g++` on Linux if `clang++` is not installed, or
 
 `.github/workflows/build.yml` builds and runs `tests/run.sh` on every target in
 release mode (`DCAD_BUILD_TYPE=release`; local runs default to dub's debug
-build) and packages a native archive per target. Each archive is a self-contained
-runtime directory: the GUI finds icons, fonts, sample scripts, the D import
-sources and static libraries for hot-loaded scripts beside the binary, so it no
-longer depends on the caller's working directory or a source checkout.
-Pushing a tag also publishes those archives as a GitHub Release. On Windows the
+build) and packages a native archive per target. The released `dcad-gui` is a
+**self-extracting launcher**: its executable contains the real GUI, icons,
+fonts, sample scripts, the D source/import libraries needed by hot reload, the
+new-project template and (where available) OCCT/GLFW libraries. On first launch
+it expands them into a versioned cache under the user's data directory and runs
+the GUI from there, so a downloaded binary works from any working directory
+with no system OCCT/GLFW install. Pushing a tag also publishes those archives
+as a GitHub Release. On Windows the
 CI downloads the official OCCT 7.9.3 `vc14-64` archive, its matching `3rdparty`
 archive (for `TKernel`'s jemalloc/TBB and the media/image dependencies reached
 via `TKDESTEP`), and GLFW 3.4's prebuilt WIN64 binaries. Headers, `.lib` files
@@ -105,7 +114,13 @@ your VS Code Base16 Default Light palette with an OpenSCAD-style renderer. The w
 recommends `webfreak.code-d` for D LSP support in VS Code. Scripts are D source
 compiled to a hot-loaded shared library on each Run; both legacy script bodies
 and module-style scripts are supported, including one runnable module per
-element in `samples/coffee-table/`. See [`gui/README.md`](gui/README.md) for controls
+element in `samples/coffee-table/`.
+
+`dcad-gui` also acts as a project handler: `dcad-gui <directory|dcad.json|file.d>`
+opens a plain directory of D sources, and `dcad-gui --new-project <directory>`
+(or **File > New Project...**) scaffolds the CC BY 4.0
+[daimochi-tsugi](https://ixday.github.io/carpentry/#daimochi-tsugi) joint from
+`project-template/daimochi`. See [`gui/README.md`](gui/README.md) for controls
 and the execution-model tradeoff.
 
 ## Samples

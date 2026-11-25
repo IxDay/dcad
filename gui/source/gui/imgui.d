@@ -52,6 +52,15 @@ struct DcadMesh
     int triangles;
 }
 
+/// Native menus use plain C callbacks. These aliases deliberately have no
+/// nothrow/@nogc attributes: New Project opens dialogs and writes files.
+alias ShaderMenuCallback = extern(C) void function(int);
+alias NewProjectCallback = extern(C) void function();
+
+extern(C) nothrow @nogc void dcad_install_native_menu(
+    void* window, void* display, ShaderMenuCallback onShader,
+    NewProjectCallback onNewProject);
+
 extern(C) nothrow @nogc
 {
     // lifecycle

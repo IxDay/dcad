@@ -10,7 +10,7 @@
 module gui.platform;
 
 import std.path : buildPath, dirName;
-import std.file : exists, thisExePath;
+import std.file : exists, thisExePath, getcwd;
 import std.string : toStringz, fromStringz;
 import std.conv : to;
 
@@ -49,14 +49,13 @@ private bool hasGuiAssets(string dir)
 /**
  * Root for all runtime resources (scripts, icons, fonts, script SDK).
  *
- * A release archive keeps these next to the executable, so the GUI must not
- * depend on the caller's working directory. `dub run :gui` still works from
- * the repository root, which is detected as the fallback.
+ * A self-extracting launcher places the real GUI in a cache directory together
+ * with its assets and libraries, so the GUI never depends on the caller's
+ * working directory. In a source checkout the repository root is detected as
+ * the fallback, so `dub run :gui` keeps working.
  */
 string resourceRoot()
 {
-    import std.file : getcwd;
-
     auto exeDir = dirName(thisExePath());
     if (hasGuiAssets(exeDir)) return exeDir;
     auto cwd = getcwd();
@@ -163,10 +162,20 @@ string[] pluginLinkArgs(string repoRoot)
     {
         args ~= "-L-L" ~ buildPath(repoRoot, "build");
         args ~= "-L-ldcad_shim";
-        args ~= "-L-L/opt/homebrew/lib";
-        args ~= "-L-rpath";
-        args ~= "-L/opt/homebrew/lib";
-        args ~= "-L-L/usr/local/lib";
+        auto bundledLib = buildPath(repoRoot, "lib");
+        if (exists(buildPath(bundledLib, "libTKernel.dylib")))
+        {
+            args ~= "-L-L" ~ bundledLib;
+            args ~= "-L-rpath";
+            args ~= "-L" ~ bundledLib;
+        }
+        else
+        {
+            args ~= "-L-L/opt/homebrew/lib";
+            args ~= "-L-rpath";
+            args ~= "-L/opt/homebrew/lib";
+            args ~= "-L-L/usr/local/lib";
+        }
         foreach (lib; commonOcctLibraries ~ bundledOcctExtras)
             args ~= "-L-l" ~ lib;
         args ~= "-L-lc++";
@@ -176,6 +185,9 @@ string[] pluginLinkArgs(string repoRoot)
     {
         args ~= "-L-L" ~ buildPath(repoRoot, "build");
         args ~= "-L-ldcad_shim";
+        auto bundledLib = buildPath(repoRoot, "lib");
+        if (exists(buildPath(bundledLib, "libTKernel.so")))
+            args ~= "-L-L" ~ bundledLib;
         foreach (lib; commonOcctLibraries ~ distroOcctExtras)
             args ~= "-L-l" ~ lib;
         args ~= "-L-lstdc++";

@@ -8,18 +8,21 @@
  */
 #include <windows.h>
 
-extern "C" void dcad_install_native_shader_menu(void* window, void* display,
-                                                 void (*onSelect)(int));
+extern "C" void dcad_install_native_menu(void* window, void* display,
+                                         void (*onSelect)(int),
+                                         void (*onNewProject)());
 extern "C" void dcad_native_menu_poll();
 
 namespace
 {
 void (*g_onSelect)(int) = nullptr;
+void (*g_onNewProject)() = nullptr;
 HWND g_hwnd = nullptr;
 HMENU g_menu = nullptr;
 HMENU g_view = nullptr;
 WNDPROC g_original = nullptr;
 
+const UINT NEW_PROJECT = 1101;
 const UINT SHADER_DEFAULT = 1001;
 const UINT SHADER_WOOD = 1002;
 
@@ -35,6 +38,7 @@ LRESULT CALLBACK menuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
         switch (LOWORD(wParam))
         {
+        case NEW_PROJECT:  if (g_onNewProject) g_onNewProject(); return 0;
         case SHADER_DEFAULT: selectMode(SHADER_DEFAULT, 0); return 0;
         case SHADER_WOOD:    selectMode(SHADER_WOOD, 1);    return 0;
         default: break;
@@ -44,19 +48,25 @@ LRESULT CALLBACK menuWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 }
 }
 
-extern "C" void dcad_install_native_shader_menu(void* window, void* display,
-                                                 void (*onSelect)(int))
+extern "C" void dcad_install_native_menu(void* window, void* display,
+                                         void (*onSelect)(int),
+                                         void (*onNewProject)())
 {
     (void)display;
     g_onSelect = onSelect;
+    g_onNewProject = onNewProject;
     g_hwnd = static_cast<HWND>(window);
     if (!g_hwnd) return;
+
+    HMENU file = CreateMenu();
+    AppendMenuA(file, MF_STRING, NEW_PROJECT, "New Project...\tCtrl+N");
 
     g_view = CreateMenu();
     AppendMenuA(g_view, MF_STRING, SHADER_DEFAULT, "Default (VS Code yellow)");
     AppendMenuA(g_view, MF_STRING, SHADER_WOOD, "Wood (joints GLB)");
 
     g_menu = CreateMenu();
+    AppendMenuA(g_menu, MF_POPUP, reinterpret_cast<UINT_PTR>(file), "File");
     AppendMenuA(g_menu, MF_POPUP, reinterpret_cast<UINT_PTR>(g_view), "View");
 
     SetMenu(g_hwnd, g_menu);

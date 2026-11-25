@@ -8,7 +8,11 @@
 /loft
 /coffee-table
 /dcad-gui
+/dcad-gui.exe
+/dcad-launcher
+/dcad-launcher.exe
 /dcad-script-host-smoke
+__pycache__/
 /table/
 /dcad-export.step
 /imgui.ini

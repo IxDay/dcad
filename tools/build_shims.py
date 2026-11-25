@@ -12,6 +12,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# This script imports build_resources; don't leave __pycache__ in the checkout.
+sys.dont_write_bytecode = True
+
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / "build"
 GUI = ROOT / "gui"
@@ -71,6 +74,12 @@ def menu_source():
 
 
 def build(which):
+    if which == "launcher":
+        # Produce the ZIP (with the already-linked GUI binary) and its linker
+        # object/resource before dub links the launcher.
+        from build_resources import main as build_resources
+        build_resources()
+        return
     if which == "core":
         sources = [ROOT / "shim" / "dcad_shim.cpp"]
         includes = occt_includes()
@@ -96,7 +105,7 @@ def build(which):
         out = BUILD / ("dcad_gui_shim.lib" if WINDOWS
                        else "libdcad_gui_shim.a")
     else:
-        raise SystemExit("usage: build_shims.py core|gui")
+        raise SystemExit("usage: build_shims.py core|gui|launcher")
 
     BUILD.mkdir(parents=True, exist_ok=True)
     cc = compiler()

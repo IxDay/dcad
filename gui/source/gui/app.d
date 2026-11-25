@@ -9,13 +9,15 @@ module gui.app;
 
 import std.stdio : stderr, writeln;
 import std.file : mkdirRecurse, exists, readText, write, dirEntries, SpanMode, isDir, tempDir;
-import std.path : buildPath, baseName, extension;
+import std.path : buildPath, baseName, dirName, extension;
 import std.string : toStringz, format, startsWith, endsWith;
 import std.algorithm.sorting : sort;
 import std.array : array;
 import std.conv : to;
 
 import gui.platform : processId, nativeHandles, resourceRoot;
+import gui.project : Project, chooseProjectParent, fallbackProjectParent,
+                     uniqueProjectPath;
 
 import bindbc.glfw;
 import bindbc.opengl;
@@ -26,14 +28,23 @@ import gui.script_host : ScriptHost, RunResult;
 
 import dcad.shape : Shape;
 
-// The native View > Shader menu calls back into D with a mode index.
+// Native menus call back into D with plain C function pointers. The shader
+// callback is static state; New Project needs the editor's local variables, so
+// it dispatches through a short-lived delegate installed for the session.
 private Viewport g_menuViewport;
+private void delegate() g_newProjectAction;
 
 extern(C) void dcad_shader_menu_callback(int mode)
 {
     if (g_menuViewport is null) return;
     g_menuViewport.setShaderMode(mode == 1 ? ShaderMode.wood
                                            : ShaderMode.vscodeYellow);
+}
+
+extern(C) void dcad_new_project_callback()
+{
+    if (g_newProjectAction !is null)
+        g_newProjectAction();
 }
 
 // Startup opens a real, tracked script file. There is no hidden session file.
@@ -82,9 +93,14 @@ private void*[string] iconCache;
 /// Source module of an animation part, from its stable id. The part ids are
 /// shared with the motion keyframes, so this stays a pure naming convention:
 /// clicking a row in the parts list opens the file that builds that geometry.
-private string partSourceFile(string id)
+private string partSourceFile(string id, string projectRoot)
 {
     if (id.length == 0) return null;
+    // A project's part ids are its source file names (part-a.d, key.d, ...).
+    // That keeps new projects free of GUI-side naming conventions.
+    auto local = buildPath(projectRoot, id ~ ".d");
+    if (exists(local)) return id ~ ".d";
+
     string moduleName;
     if (id.startsWith("leg-"))                   moduleName = "leg";
     else if (id.startsWith("apron-side-"))       moduleName = "side_apron";
@@ -96,7 +112,7 @@ private string partSourceFile(string id)
                                                   moduleName = "top_inner";
     else if (id.startsWith("wedge-"))            moduleName = "wedge";
     else return null;
-    return "samples/coffee-table/" ~ moduleName ~ ".d";
+    return buildPath("samples/coffee-table", moduleName ~ ".d");
 }
 
 private void* iconTexture(string name)
@@ -143,6 +159,36 @@ void main(string[] args)
     immutable root = resourceRoot();
     dcad_gui_set_resource_root(root.toStringz);
 
+    // Project handler: `dcad-gui <project-dir|dcad.json|source.d>` opens a
+    // project, while `--new-project <target-dir>` scaffolds the daimochi
+    // sample and opens it. With no argument the bundled coffee table is used.
+    Project project;
+    if (args.length > 1 && args[1] == "--new-project")
+    {
+        immutable target = args.length > 2
+            ? args[2] : uniqueProjectPath(fallbackProjectParent(),
+                                          "daimochi-tsugi");
+        try
+            project = Project.create(target, root);
+        catch (Exception e)
+            stderr.writeln("new project failed: ", e.msg);
+    }
+    else if (args.length > 1)
+    {
+        try
+            project = Project.open(args[1]);
+        catch (Exception e)
+            stderr.writeln("cannot open project ", args[1], ": ", e.msg);
+    }
+    if (project.root.length == 0)
+    {
+        project.root = root;
+        project.name = "samples";
+        project.entry = defaultFile;
+    }
+    string projectRoot = project.root;
+    string currentFile = project.entry;
+
     // --- GLFW / OpenGL ----------------------------------------------------
     if (glfwInit() != GLFW_TRUE)
     {
@@ -176,6 +222,13 @@ void main(string[] args)
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
+    void updateTitle()
+    {
+        auto label = "dcad - " ~ project.name ~ " - " ~ baseName(currentFile);
+        glfwSetWindowTitle(window, label.toStringz);
+    }
+    updateTitle();
+
     const glSupport = loadOpenGL();
     if (glSupport == GLSupport.noLibrary || glSupport == GLSupport.badLibrary)
     {
@@ -197,20 +250,21 @@ void main(string[] args)
     immutable workDir = buildPath(tempDir(), "dcad-gui-" ~ processId.to!string);
     mkdirRecurse(workDir);
 
-    auto host = new ScriptHost(workDir, root);
+    auto host = new ScriptHost(workDir, root, project.root);
     auto viewport = new Viewport();
     scope(exit) viewport.dispose(); // context is still current at scope exit
 
     g_menuViewport = viewport;
     scope(exit) g_menuViewport = null;
     auto native = nativeHandles(cast(void*) window);
-    dcad_install_native_shader_menu(native.window, native.display,
-                                    &dcad_shader_menu_callback);
+    dcad_install_native_menu(native.window, native.display,
+                             &dcad_shader_menu_callback,
+                             &dcad_new_project_callback);
 
     // Open a real project file, so the tab name is always truthful and Save
     // never needs a hidden scratch destination.
-    dcad_textedit_set_text(editor, readText(buildPath(root, defaultFile)).toStringz);
-    string currentFile = defaultFile;
+    dcad_textedit_set_text(editor,
+                           readText(buildPath(projectRoot, currentFile)).toStringz);
 
     string status = "Ready - press Ctrl+Enter (Cmd+Enter) or Run";
     string lastError;
@@ -273,6 +327,7 @@ void main(string[] args)
                         dcad_textedit_set_text(editor, readText(e.path).toStringz);
                         currentFile = key;
                         status = "Opened " ~ key;
+                        updateTitle();
                     }
                     catch (Exception)
                     {
@@ -365,6 +420,42 @@ void main(string[] args)
     // Initial run so the viewport is not empty on startup.
     doRunScript();
 
+    /// File > New Project: choose a parent directory, scaffold the daimochi
+    /// sample from the embedded template, switch the host to it and rebuild.
+    void createNewProject()
+    {
+        bool usedFallback = false;
+        auto parent = chooseProjectParent();
+        if (parent is null)
+        {
+            parent = fallbackProjectParent();
+            usedFallback = true;
+            mkdirRecurse(parent);
+        }
+
+        try
+        {
+            auto created = Project.create(
+                uniqueProjectPath(parent, "daimochi-tsugi"), root);
+            destroy(host);
+            host = new ScriptHost(workDir, root, created.root);
+            project = created;
+            projectRoot = created.root;
+            currentFile = created.entry;
+            dcad_textedit_set_text(editor,
+                                   readText(created.entryPath()).toStringz);
+            updateTitle();
+            doRunScript();
+            status = "Created " ~ created.root
+                   ~ (usedFallback ? " (folder picker unavailable)" : "");
+        }
+        catch (Exception e)
+            status = "New project failed: " ~ e.msg;
+    }
+
+    g_newProjectAction = &createNewProject;
+    scope(exit) g_newProjectAction = null;
+
     // --- Main loop --------------------------------------------------------
     while (glfwWindowShouldClose(window) == 0)
     {
@@ -404,7 +495,7 @@ void main(string[] args)
             if (dcad_gui_begin_child("##tree", 0,
                                      treeH > 40 ? treeH : 40,
                                      childFlagsNone))
-                drawFileTree(root, "");
+                drawFileTree(projectRoot, "");
             dcad_gui_end_child();
         }
         dcad_gui_end();
@@ -429,10 +520,11 @@ void main(string[] args)
             {
                 import std.string : fromStringz;
                 if (!currentFile.length)
-                    currentFile = defaultFile;
-                immutable target = buildPath(root, currentFile);
+                    currentFile = project.entry;
+                immutable target = buildPath(projectRoot, currentFile);
                 write(target, fromStringz(dcad_textedit_get_text(editor)).idup);
                 status = "Saved " ~ target;
+                updateTitle();
             }
             dcad_gui_same_line();
             dcad_gui_align_text_to_frame_padding();
@@ -658,8 +750,8 @@ void main(string[] args)
 
                     dcad_gui_set_cursor_screen_pos(startX - 3f, rowY - 2f);
                     auto ident = host.animPartId(cast(int) i);
-                    auto rel = partSourceFile(ident);
-                    if (rel is null) rel = partSourceFile(name);
+                    auto rel = partSourceFile(ident, projectRoot);
+                    if (rel is null) rel = partSourceFile(name, projectRoot);
                     if (dcad_gui_invisible_button(
                             ("##part" ~ i.to!string).toStringz,
                             partsOverlayWidth, rowH) != 0 && rel !is null)
@@ -667,9 +759,11 @@ void main(string[] args)
                         try
                         {
                             dcad_textedit_set_text(
-                                editor, readText(buildPath(root, rel)).toStringz);
+                                editor,
+                                readText(buildPath(projectRoot, rel)).toStringz);
                             currentFile = rel;
                             status = "Opened " ~ rel;
+                            updateTitle();
                         }
                         catch (Exception)
                         {

@@ -12,6 +12,11 @@ brew install glfw                     # one-time, macOS
 dub run :gui
 ```
 
+A released binary needs no such install: `dcad-gui` is a self-extracting
+launcher. It expands its embedded GUI, icons, fonts, D sources, static libraries,
+project template and OCCT/GLFW libraries into a versioned cache under the user's
+data directory, then starts the GUI from there.
+
 The window opens the real tracked file `samples/coffee-table/table.d` and
 renders it in your VS Code **Base16 Default Light** palette (`#f8f8f8` editor, `#f9f9f9` sidebar,
 `#383838` text, `#7cafc2` accents). The code editor uses D-aware syntax colours
@@ -27,12 +32,16 @@ through the same C callback.
 Edit the script, press **Cmd/Ctrl+Enter** (or click **Run**) to recompile and
 re-mesh.
 
-The left sidebar shows the repository file tree with the exact file icons VS Code
-uses (its built-in Seti icon theme, extracted to PNGs). Click a disclosure arrow
-to expand or collapse folders, and click a file to load it into the editor. The
-sidebar is always visible. The coffee-table sample and its animation are
-available in `samples/coffee-table/` for a quick demo; each element also has its
-own module there, which you can open and Run to preview that element alone.
+The left sidebar shows the current project's directory with the exact file icons
+VS Code uses (its built-in Seti icon theme, extracted to PNGs). Click a disclosure
+arrow to expand or collapse folders, and click a file to load it into the editor.
+The sidebar is always visible. By default the bundled coffee-table sample is
+open; **File > New Project...** (Cmd/Ctrl+N) scaffolds the three-piece
+daimochi-tsugi joint in a folder you choose, opens `main.d` and runs its
+take-apart animation. You can also pass a project directory, `dcad.json` or a
+`.d` file to `dcad-gui` on the command line; **Save** always writes the open file
+in that directory. Each coffee-table element has its own module, which you can
+open and Run to preview that element alone.
 When an animated script is loaded, its parts are listed as a transparent overlay
 in the top-right of the preview: hovering a part highlights it in the render, and
 clicking it opens the source module that builds that part.
@@ -47,6 +56,7 @@ clicking it opens the source module that builds that part.
 | Zoom | Scroll over the viewport |
 | Standard view | Icon buttons: fit, iso, up, down, front/back, left/right, reset |
 | Display toggles | Icon buttons with check marks: axes, grid, wireframe, orthographic |
+| New project | File > New Project... (Cmd/Ctrl+N) → scaffold daimochi-tsugi |
 | Save script | Save icon → writes the open script file |
 | Project tree | Expand/collapse folders; click a file to open it |
 | Parts list | Hover a part to highlight it; click to open its source `.d` file |
@@ -106,10 +116,10 @@ the full script, and `motion.allPoses()` for the knock-down keyframes.
 The editor holds **D source**. On Run the GUI compiles it to a shared library
 with `ldc2`, loads it with `dlopen`, and calls a single exported entry point.
 There are two source forms, both producing the same shape/mesh and using the
-same animation overlay. Release archives include the `source/` modules, sample
-scripts, and static libraries needed for this step beside `dcad-gui`; the GUI
-resolves them through `gui.platform.resourceRoot()` rather than the process
-working directory.
+same animation overlay. The released launcher contains the `source/` modules,
+sample scripts, project template and static libraries needed for this step; it
+expands them into a cache directory and the GUI resolves them through
+`gui.platform.resourceRoot()` rather than the process working directory.
 
 ### Body-style scripts
 
@@ -189,7 +199,10 @@ POSIX uses `dlopen`/`dlsym`.
 ```
 gui/source/gui/app.d           GLFW window, ImGui frame, two panes, main loop
 gui/source/gui/script_host.d   compile + dlopen + both script forms + error capture
+gui/source/gui/project.d       manifest, project handler, New Project scaffolding
 gui/source/gui/viewport.d      FBO render-to-texture, VBO mesh, camera, shading
+gui/source/launcher/           embedded payload + self-extracting launcher
+project-template/daimochi/     editable D source scaffolded by New Project
 samples/coffee-table/          dimensions, util, one file per element, motion, table
 gui/source/gui/imgui.d         extern(C) declarations for the C++ shim
 gui/shim/dcad_gui_shim.cpp     ImGui + backends + TextEditor + OCCT mesher wrappers

@@ -79,6 +79,8 @@ subPackage {
     targetType "executable"
     targetName "dcad-gui"
     sourcePaths "gui/source"
+    excludedSourceFiles "gui/source/launcher/main.d" \
+                        "gui/source/launcher/embedded.d"
     importPaths "gui/source" "source"
     dependency "dcad" version="*"
     dependency "bindbc-glfw" version="~>1.1"
@@ -93,7 +95,7 @@ subPackage {
     libs "glfw" platform="osx"
     libs "glfw" "GL" "X11" platform="linux"
     libs "glfw3_mt" "opengl32" "user32" "gdi32" platform="windows"
-    lflags "-L/opt/homebrew/lib" "-rpath" "/opt/homebrew/lib" platform="osx"
+    lflags "-L/opt/homebrew/lib" platform="osx"
     lflags "-framework" "OpenGL" platform="osx"
     lflags "-framework" "Cocoa" platform="osx"
     extraDependencyFiles "gui/shim/dcad_gui_shim.cpp" \
@@ -103,16 +105,39 @@ subPackage {
                          "gui/tools/build-gui-shim.sh" "tools/build_shims.py"
 }
 
+# Self-extracting launcher. The released binary is this target: it contains
+# the real dcad-gui, assets, SDK and native libraries, and starts the GUI from
+# a versioned cache directory with no system install required. Build :gui
+# first so its binary can be embedded.
+subPackage {
+    name "gui-launcher"
+    targetType "executable"
+    targetName "dcad-launcher"
+    sourcePaths "gui/source/launcher"
+    importPaths "gui/source/launcher"
+    preBuildCommands "python $PACKAGE_DIR/tools/build_shims.py launcher"
+    lflags "$PACKAGE_DIR/build/dcad_resources.o" platform="posix"
+    lflags "$PACKAGE_DIR/build/dcad_resources.res" platform="windows"
+    extraDependencyFiles "gui/source/launcher/embedded.d" \
+                         "tools/build_shims.py" "tools/build_resources.py" \
+                         "tools/relocate_macos.py" \
+                         "project-template/daimochi/dcad.json"
+}
+
 # Exercises the script host's body-style and module-style forms headlessly.
 subPackage {
     name "script-host-smoke"
     targetType "executable"
     targetName "dcad-script-host-smoke"
     sourcePaths "gui/source" "tests/script-host-smoke"
-    excludedSourceFiles "gui/source/gui/app.d" "gui/source/gui/viewport.d"
+    excludedSourceFiles "gui/source/gui/app.d" "gui/source/gui/viewport.d" \
+                        "gui/source/launcher/main.d" \
+                        "gui/source/launcher/embedded.d"
     mainSourceFile "tests/script-host-smoke/main.d"
     importPaths "gui/source" "source"
     dependency "dcad" version="*"
+    preBuildCommands "$PACKAGE_DIR/gui/tools/build-gui-shim.sh" platform="posix"
+    preBuildCommands "python $PACKAGE_DIR/tools/build_shims.py gui" platform="windows"
     # platform.d declares GLFW's native-handle accessors on every OS.
     libs "glfw3_mt" "opengl32" "user32" "gdi32" platform="windows"
 }

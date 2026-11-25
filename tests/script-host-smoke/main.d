@@ -7,11 +7,11 @@
 module script_host_smoke;
 
 import std.stdio : writeln, stderr;
-import std.file : readText, mkdirRecurse, tempDir;
+import std.file : exists, readText, mkdirRecurse, tempDir;
 import std.path : buildPath;
 import std.conv : to;
 import gui.platform : processId, resourceRoot;
-
+import gui.project : Project;
 import gui.script_host : ScriptHost;
 
 int main()
@@ -52,6 +52,38 @@ int main()
         return 1;
     }
 
-    writeln("PASS: script host body form, element module and module assembly");
+    // File > New Project uses the same template; check it compiles and
+    // exposes the three joints expected by the parts overlay.
+    immutable projectDir = buildPath(workDir, "daimochi-tsugi");
+    auto project = Project.create(projectDir, root);
+    foreach (name; ["dcad.json", "README.md", "main.d", "dimensions.d",
+                    "daimochi_util.d", "part_a.d", "part_b.d", "key.d",
+                    "motion.d"])
+        if (!exists(buildPath(project.root, name)))
+        {
+            stderr.writeln("new project missing ", name);
+            return 1;
+        }
+
+    // A distinct scratch dir avoids reusing a dylib path from the first host:
+    // dlopen can hand back the old image if its dlclose was not final.
+    immutable projectWorkDir = buildPath(tempDir(), "dcad-project-smoke-"
+                                          ~ processId.to!string);
+    mkdirRecurse(projectWorkDir);
+    auto projectHost = new ScriptHost(projectWorkDir, root, project.root);
+    auto joint = projectHost.run(readText(project.entryPath));
+    if (!joint.ok())
+    {
+        stderr.writeln("new project failed: ", joint.error);
+        return 1;
+    }
+    if (projectHost.animPartCount() != 3)
+    {
+        stderr.writeln("new project parts: ", projectHost.animPartCount(),
+                       " (expected 3)");
+        return 1;
+    }
+
+    writeln("PASS: script host forms, new project scaffold and daimochi joint");
     return 0;
 }

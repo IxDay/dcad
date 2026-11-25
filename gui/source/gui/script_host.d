@@ -19,7 +19,7 @@ module gui.script_host;
 import std.stdio : File;
 import std.file : write, remove, exists, dirEntries, SpanMode;
 import std.path : buildPath;
-import std.process : execute;
+import std.process : execute, environment;
 import std.regex : ctRegex, matchFirst, replaceFirst;
 import std.algorithm.sorting : sort;
 import std.string : replace, toStringz, fromStringz;
@@ -285,6 +285,16 @@ extern(C) export void dcad_anim_free()
 }
 TAIL_END";
 
+/// Plugin file names must be unique for the whole process, not per host.
+/// dlopen can return a previously loaded image when a path is reused even
+/// after dlclose, so a new ScriptHost (created by File > New Project, for
+/// example) must never recycle an earlier stem.
+private size_t nextScriptGeneration()
+{
+    static size_t counter;
+    return counter++;
+}
+
 private enum moduleDecl = ctRegex!`(?m)^\s*module\s+[\w.]+\s*;`;
 
 /// A source with a module declaration is a real D module rather than a body.
@@ -318,21 +328,30 @@ private:
     string[] extraSources;
     DynamicLibrary lib;
     string loadedDylibPath;
-    int generation;
 
 public:
     this(string workDir, string repoRoot)
     {
+        this(workDir, repoRoot, repoRoot);
+    }
+
+    /// `projectRoot` is the directory whose `.d` files are compiled with the
+    /// editor source. The bare constructor keeps the bundled coffee-table
+    /// sample as the implicit project; a real project passes its own root.
+    this(string workDir, string repoRoot, string projectRoot)
+    {
         this.workDir = workDir;
         this.repoRoot = repoRoot;
-        // LDC does not follow imports, so every module of the bundled sample
-        // is passed explicitly. One flat directory keeps this automatic:
-        // dimensions, util, one file per part, motion and the table assembly.
-        immutable sampleDir = buildPath(repoRoot, "samples/coffee-table");
-        importPaths = [sampleDir];
-        if (exists(sampleDir))
+        // LDC does not follow imports, so every module of the project is
+        // passed explicitly. Flat directories keep this automatic: the sample
+        // uses samples/coffee-table, a new project uses its own directory.
+        immutable scriptDir = projectRoot == repoRoot
+            ? buildPath(repoRoot, "samples/coffee-table")
+            : projectRoot;
+        importPaths = [scriptDir];
+        if (exists(scriptDir))
         {
-            foreach (entry; dirEntries(sampleDir, "*.d", SpanMode.shallow))
+            foreach (entry; dirEntries(scriptDir, "*.d", SpanMode.shallow))
                 extraSources ~= entry.name;
             extraSources.sort();
         }
@@ -350,8 +369,7 @@ public:
     {
         unload();
 
-        immutable stem = "script_" ~ generation.to!string;
-        generation++;
+        immutable stem = "script_" ~ nextScriptGeneration().to!string;
         immutable srcPath = buildPath(workDir, stem ~ ".d");
         immutable dylibPath = buildPath(workDir, stem ~ sharedLibraryExtension());
         immutable objPath = buildPath(workDir, stem ~ ".o");
@@ -371,9 +389,19 @@ public:
             modSrcPath = buildPath(workDir, modName ~ ".d");
             write(modSrcPath, asModule(source, modName));
         }
-        write(srcPath, prelude ~ "\n"
-              ~ (moduleForm ? moduleBodyEnd(modName) : source ~ "\n" ~ bodyEnd)
-              ~ tail ~ "\n");
+        immutable fullSource = prelude ~ "\n"
+            ~ (moduleForm ? moduleBodyEnd(modName) : source ~ "\n" ~ bodyEnd)
+            ~ tail ~ "\n";
+        write(srcPath, fullSource);
+        // Optional debugging aid: keep the last generated wrapper for
+        // inspecting compiler errors without changing normal behaviour.
+        if ("DCAD_KEEP_SCRIPTS" in environment)
+        {
+            write(buildPath(workDir, "last-wrapper.d"), fullSource);
+            if (modSrcPath.length)
+                write(buildPath(workDir, "last-module.d"),
+                      asModule(source, modName));
+        }
         // Sources/objects are never kept. A loaded DLL cannot be deleted on
         // Windows, so its path is retained until the next unload()/destructor;
         // POSIX could unlink it immediately, but the same rule keeps both
