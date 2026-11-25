@@ -15,6 +15,13 @@
 #include <unordered_map>
 #include <algorithm>
 
+#ifdef _WIN32
+// The Windows SDK's GL/gl.h relies on WINGDIAPI/APIENTRY from windows.h.
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
 #ifdef __APPLE__
 #define GL_SILENCE_DEPRECATION
 #include <OpenGL/gl.h>
