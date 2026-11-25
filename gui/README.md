@@ -38,7 +38,7 @@ arrow to expand or collapse folders, and click a file to load it into the editor
 The sidebar is always visible. By default the bundled coffee-table sample is
 open; **File > New Project...** (Cmd/Ctrl+N) scaffolds the three-piece
 daimochi-tsugi joint in a folder you choose, opens `main.d` and runs its
-take-apart animation. You can also pass a project directory, `dcad.json` or a
+take-apart animation. You can also pass a project directory, `.dcad.toml` or a
 `.d` file to `dcad-gui` on the command line; **Save** always writes the open file
 in that directory. Each coffee-table element has its own module, which you can
 open and Run to preview that element alone.

@@ -10,7 +10,7 @@
 module launcher.embedded;
 
 import std.file : exists, mkdirRecurse, readText, remove, rename, write,
-                  rmdirRecurse, symlink;
+                  rmdirRecurse;
 import std.path : buildPath, dirName;
 import std.zip : ZipArchive;
 import std.conv : to;
@@ -173,17 +173,6 @@ private void extract(const(ubyte)[] bytes, string root, string tag)
         }
         mkdirRecurse(dirName(target));
         zip.expand(member);
-        version (Posix)
-        {
-            // Python stores short library names as symlinks, avoiding a
-            // duplicate copy of every versioned dylib in the payload.
-            immutable attrs = member.fileAttributes;
-            if ((attrs & 0xF000) == 0xA000)
-            {
-                symlink(cast(string) member.expandedData.idup, target);
-                continue;
-            }
-        }
         write(target, member.expandedData);
     }
     write(buildPath(staging, "resource-version.txt"), tag);

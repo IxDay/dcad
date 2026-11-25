@@ -56,7 +56,7 @@ int main()
     // exposes the three joints expected by the parts overlay.
     immutable projectDir = buildPath(workDir, "daimochi-tsugi");
     auto project = Project.create(projectDir, root);
-    foreach (name; ["dcad.json", "README.md", "main.d", "dimensions.d",
+    foreach (name; [".dcad.toml", "README.md", "main.d", "dimensions.d",
                     "daimochi_util.d", "part_a.d", "part_b.d", "key.d",
                     "motion.d"])
         if (!exists(buildPath(project.root, name)))
@@ -64,6 +64,21 @@ int main()
             stderr.writeln("new project missing ", name);
             return 1;
         }
+
+    // The TOML marker is the project root: opening the directory, the marker
+    // itself, or a source file must all resolve to the same name and entry.
+    foreach (candidate; [project.root,
+                         buildPath(project.root, ".dcad.toml"),
+                         project.entryPath])
+    {
+        auto opened = Project.open(candidate);
+        if (opened.name != "Daimochi-tsugi" || opened.entry != "main.d")
+        {
+            stderr.writeln("project marker failed for ", candidate, ": ",
+                           opened.name, " / ", opened.entry);
+            return 1;
+        }
+    }
 
     // A distinct scratch dir avoids reusing a dylib path from the first host:
     // dlopen can hand back the old image if its dlclose was not final.
@@ -84,6 +99,6 @@ int main()
         return 1;
     }
 
-    writeln("PASS: script host forms, new project scaffold and daimochi joint");
+    writeln("PASS: script host forms, TOML project scaffold and daimochi joint");
     return 0;
 }

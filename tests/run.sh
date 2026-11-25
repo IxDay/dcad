@@ -39,9 +39,10 @@ if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
         ROOT=$(./dcad-launcher.exe --print-root)
     fi
     test -f "$ROOT/dcad-gui" || test -f "$ROOT/dcad-gui.exe"
-    test -f "$ROOT/project-template/daimochi/dcad.json"
+    test -f "$ROOT/project-template/daimochi/.dcad.toml"
     test -f "$ROOT/libdcad.a" || test -f "$ROOT/dcad.lib"
     test -d "$ROOT/assets/icons"
+    test -f "$ROOT/samples/coffee-table/table.d"
     test -d "$ROOT/samples/coffee-table"
     test -d "$ROOT/source"
     echo "PASS: embedded launcher payload and project template"

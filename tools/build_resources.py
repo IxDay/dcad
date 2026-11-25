@@ -25,26 +25,25 @@ MACOS = sys.platform == "darwin"
 
 
 def add_tree(zf, source, prefix):
-    """Store visible files from a directory tree under `prefix`."""
+    """Store files from a directory tree under `prefix`.
+
+    Dotfiles are included: `.dcad.toml` is the project-root marker. Hidden
+    directories remain excluded so build caches never enter the payload.
+    """
     if not source.exists():
         return
     for path in sorted(source.rglob("*")):
-        if not path.is_file() or any(p.startswith(".") for p in path.parts):
+        if not path.is_file():
             continue
-        zf.write(path, prefix + "/" + path.relative_to(source).as_posix())
+        parts = path.relative_to(source).parts
+        if any(p.startswith(".") for p in parts[:-1]):
+            continue
+        zf.write(path, prefix + "/" + "/".join(parts))
 
 
 def add_file(zf, path, name):
     if Path(path).exists():
         zf.write(path, name)
-
-
-def symlink(zf, name, target):
-    """Store a POSIX symlink; gui.embedded recreates it from the stored text."""
-    info = zipfile.ZipInfo(name)
-    info.create_system = 3
-    info.external_attr = (0o120777 << 16)
-    zf.writestr(info, target)
 
 
 def macos_libraries(stage):

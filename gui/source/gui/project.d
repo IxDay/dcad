@@ -1,9 +1,10 @@
 /**
  * Project format and scaffolding.
  *
- * A project is a plain directory with a `dcad.json` manifest and D sources.
- * `dcad-gui` accepts either the directory or the manifest as its first
- * argument, which makes the released binary usable as a project handler.
+ * A project is a plain directory with a `.dcad.toml` marker and D sources.
+ * The marker's directory is the project root, so `dcad-gui` accepts either the
+ * directory, the marker file, or any source file inside it as its first
+ * argument. Older `dcad.json` manifests are still read for compatibility.
  *
  * The same module creates File > New Project from the template embedded in the
  * runtime payload, so the menu and the command-line path cannot diverge.
@@ -14,9 +15,14 @@ import std.file : exists, isDir, mkdirRecurse, readText, write, dirEntries, Span
 import std.json : parseJSON, JSONType;
 import std.path : absolutePath, baseName, buildPath, dirName, extension;
 import std.process : execute;
-import std.string : strip;
+import std.algorithm.searching : countUntil, endsWith, startsWith;
+import std.string : strip, splitLines;
 
 import gui.platform : resourceRoot;
+
+/// Manifest names accepted as project markers. The first one is what New
+/// Project writes; the others keep existing projects and early releases usable.
+private enum string[] manifestNames = [".dcad.toml", "dcad.toml", "dcad.json"];
 
 /// Parsed project manifest.
 struct Project
@@ -38,7 +44,7 @@ struct Project
         return buildPath(root, entry);
     }
 
-    /// Open a project from a directory, a `dcad.json` file, or any source file
+    /// Open a project from a directory, a marker file, or any source file
     /// inside a project. A bare source file is opened as the entry point.
     static Project open(string path)
     {
@@ -52,13 +58,20 @@ struct Project
         else
         {
             result.root = dirName(resolved);
-            if (baseName(resolved) != "dcad.json")
-                requestedSource = baseName(resolved);
+            auto file = baseName(resolved);
+            if (!isManifestName(file))
+                requestedSource = file;
         }
 
-        immutable manifest = buildPath(result.root, "dcad.json");
-        if (exists(manifest))
-            result.readManifest(manifest);
+        foreach (candidate; manifestNames)
+        {
+            immutable manifest = buildPath(result.root, candidate);
+            if (exists(manifest))
+            {
+                result.readManifest(manifest);
+                break;
+            }
+        }
         // An explicitly named source wins over the manifest's default entry.
         if (requestedSource.length)
             result.entry = requestedSource;
@@ -85,24 +98,62 @@ struct Project
         mkdirRecurse(target);
         foreach (item; dirEntries(source, SpanMode.shallow))
         {
-            if (!item.isFile || extension(item.name).length == 0)
-                continue;
-            write(buildPath(target, baseName(item.name)), readText(item.name));
+            if (!item.isFile) continue;
+            auto name = baseName(item.name);
+            // Keep dotfiles such as .dcad.toml as well as normal sources.
+            if (!extension(name).length && !name.startsWith(".")) continue;
+            write(buildPath(target, name), readText(item.name));
         }
 
         Project result;
         result.root = target;
-        result.readManifest(buildPath(target, "dcad.json"));
+        immutable marker = buildPath(target, manifestNames[0]);
+        enforce(exists(marker), "project template is missing " ~ marker);
+        result.readManifest(marker);
         if (!result.name.length)
             result.name = baseName(target);
         return result;
     }
 
 private:
+    static bool isManifestName(string name)
+    {
+        foreach (candidate; manifestNames)
+            if (name == candidate) return true;
+        return false;
+    }
+
     void readManifest(string path)
     {
-        import std.string : fromStringz;
+        if (path.endsWith(".toml")) readToml(path);
+        else readLegacyJson(path);
+    }
 
+    /// Minimal TOML reader for the flat key/value table we need. Values are
+    /// basic strings; keys are `name`, `entry` and `description`. Anything
+    /// else is ignored so future fields can be added without breaking the GUI.
+    void readToml(string path)
+    {
+        foreach (raw; splitLines(readText(path)))
+        {
+            auto line = strip(raw);
+            if (!line.length || line[0] == '#') continue;
+            auto equal = countUntil(line, '=');
+            if (equal < 0) continue;
+            auto key = strip(line[0 .. equal]);
+            auto value = unquoteToml(line[equal + 1 .. $]);
+            switch (key)
+            {
+                case "name":        this.name = value; break;
+                case "entry":       this.entry = value; break;
+                case "description": this.description = value; break;
+                default: break;
+            }
+        }
+    }
+
+    void readLegacyJson(string path)
+    {
         auto json = parseJSON(readText(path));
         if (json.type != JSONType.object)
             return;
@@ -116,6 +167,35 @@ private:
             if (description.type == JSONType.string)
                 this.description = description.str;
     }
+}
+
+/// Strip TOML basic-string quotes and the escapes we emit in the template.
+private string unquoteToml(string value)
+{
+    value = strip(value);
+    if (value.length < 2 || value[0] != '"' || value[$-1] != '"')
+        return value;
+    auto inner = value[1 .. $-1];
+    string result;
+    for (size_t i = 0; i < inner.length; ++i)
+    {
+        if (inner[i] != '\\' || i + 1 == inner.length)
+        {
+            result ~= inner[i];
+            continue;
+        }
+        ++i;
+        switch (inner[i])
+        {
+            case 'n': result ~= '\n'; break;
+            case 't': result ~= '\t'; break;
+            case 'r': result ~= '\r'; break;
+            case '"': result ~= '"'; break;
+            case '\\': result ~= '\\'; break;
+            default:  result ~= inner[i]; break;
+        }
+    }
+    return result;
 }
 
 /// Make a non-existing sibling of `parent`, e.g. `daimochi-tsugi-1`.

@@ -159,7 +159,7 @@ void main(string[] args)
     immutable root = resourceRoot();
     dcad_gui_set_resource_root(root.toStringz);
 
-    // Project handler: `dcad-gui <project-dir|dcad.json|source.d>` opens a
+    // Project handler: `dcad-gui <project-dir|.dcad.toml|source.d>` opens a
     // project, while `--new-project <target-dir>` scaffolds the daimochi
     // sample and opens it. With no argument the bundled coffee table is used.
     Project project;

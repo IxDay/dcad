@@ -116,8 +116,10 @@ compiled to a hot-loaded shared library on each Run; both legacy script bodies
 and module-style scripts are supported, including one runnable module per
 element in `samples/coffee-table/`.
 
-`dcad-gui` also acts as a project handler: `dcad-gui <directory|dcad.json|file.d>`
-opens a plain directory of D sources, and `dcad-gui --new-project <directory>`
+`dcad-gui` also acts as a project handler:
+`dcad-gui <directory|.dcad.toml|file.d>` opens a plain directory of D sources
+whose root is marked by a `.dcad.toml` file (legacy `dcad.json` still works), and
+`dcad-gui --new-project <directory>`
 (or **File > New Project...**) scaffolds the CC BY 4.0
 [daimochi-tsugi](https://ixday.github.io/carpentry/#daimochi-tsugi) joint from
 `project-template/daimochi`. See [`gui/README.md`](gui/README.md) for controls
