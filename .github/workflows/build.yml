@@ -173,6 +173,9 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This job has no checkout, so gh cannot infer the repository from
+          # a local git remote. Point it at the workflow's repository.
+          GH_REPO: ${{ github.repository }}
         run: |
           set -eu
           TAG="${GITHUB_REF_NAME}"
