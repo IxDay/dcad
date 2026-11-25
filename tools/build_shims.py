@@ -55,7 +55,9 @@ def compiler():
 
 def compile_flags():
     if WINDOWS:
-        return ["/nologo", "/std:c++17", "/O2", "/EHsc", "/MD", "/W3",
+        # LDC links the static MSVC CRT by default; all shim objects must use
+        # the same /MT runtime as the D objects and the glfw3_mt.lib archive.
+        return ["/nologo", "/std:c++17", "/O2", "/EHsc", "/MT", "/W3",
                 "/DNOMINMAX", "/D_CRT_SECURE_NO_WARNINGS"]
     return ["-std=c++17", "-O2", "-fPIC"]
 

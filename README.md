@@ -65,9 +65,9 @@ CI downloads the official OCCT 7.9.3 `vc14-64` archive, its matching `3rdparty`
 archive (for `TKernel`'s jemalloc/TBB and the media/image dependencies reached
 via `TKDESTEP`), and GLFW 3.4's prebuilt WIN64 binaries. Headers, `.lib` files
 and DLLs are staged under `C:\dcad\occt\{include,lib,bin}`. To reproduce
-locally, use the same archives
-(or an OCCT 7.7–7.9 MSVC build; current vcpkg ships 8.x, which the bindings do
-not target yet).
+locally, use the same archives (or an OCCT 7.7–7.9 MSVC build; current vcpkg
+ships 8.x, which the bindings do not target yet). Windows shims and GLFW use
+the static `/MT` CRT to match LDC; use `glfw3_mt.lib`, not `glfw3.lib`.
 
 Windows ARM64 is not supported: LDC 1.43 publishes only x86/x64 Windows
 toolchains, so cross-compiling with `-mtriple=aarch64-pc-windows-msvc` cannot

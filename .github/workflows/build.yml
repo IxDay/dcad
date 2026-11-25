@@ -118,7 +118,8 @@ jobs:
           unzip -q /c/dcad/deps/glfw.zip -d /c/dcad/deps
           GLFW=/c/dcad/deps/glfw-3.4.bin.WIN64
           cp -R "$GLFW/include/GLFW" /c/dcad/occt/include/
-          cp "$GLFW/lib-vc2022/glfw3.lib" /c/dcad/occt/lib/
+          # glfw3_mt.lib matches LDC's /MT CRT; the plain glfw3.lib is /MD.
+          cp "$GLFW/lib-vc2022/glfw3_mt.lib" /c/dcad/occt/lib/
 
           echo 'C:\dcad\occt\bin' >> "$GITHUB_PATH"
           echo "DCAD_OCCT_INCLUDE=C:/dcad/occt/include/opencascade" >> "$GITHUB_ENV"

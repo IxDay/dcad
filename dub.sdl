@@ -92,7 +92,7 @@ subPackage {
     lflags "$PACKAGE_DIR/build/dcad_gui_shim.lib" platform="windows"
     libs "glfw" platform="osx"
     libs "glfw" "GL" "X11" platform="linux"
-    libs "glfw3" "opengl32" "user32" "gdi32" platform="windows"
+    libs "glfw3_mt" "opengl32" "user32" "gdi32" platform="windows"
     lflags "-L/opt/homebrew/lib" "-rpath" "/opt/homebrew/lib" platform="osx"
     lflags "-framework" "OpenGL" platform="osx"
     lflags "-framework" "Cocoa" platform="osx"
