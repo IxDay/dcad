@@ -8,7 +8,7 @@
  */
 module dcad.occt.topology;
 
-import dcad.occt.types : opaqueWords, TopAbs_ShapeEnum;
+import dcad.occt.types : opaqueWords, TopAbs_ShapeEnum, cxxMangle;
 
 extern(C++) struct TopoDS_Shape
 {
@@ -74,13 +74,19 @@ ref const(TopoDS_Shape) asShape(T)(ref const T s) @trusted
 extern(C++) struct BRepBuilderAPI_MakeShape
 {
     void*[opaqueWords] _opaque;
-    ref const(TopoDS_Shape) Shape();
+
+    pragma(mangle, cxxMangle!(
+        "_ZN24BRepBuilderAPI_MakeShape5ShapeEv",
+        "?Shape@BRepBuilderAPI_MakeShape@@UEAAAEBVTopoDS_Shape@@XZ")) ref const(TopoDS_Shape) Shape();
 }
 
 extern(C++) struct BRepAlgoAPI_Algo
 {
     void*[opaqueWords] _opaque;
-    ref const(TopoDS_Shape) Shape();
+
+    pragma(mangle, cxxMangle!(
+        "_ZN16BRepAlgoAPI_Algo5ShapeEv",
+        "?Shape@BRepAlgoAPI_Algo@@UEAAAEBVTopoDS_Shape@@XZ")) ref const(TopoDS_Shape) Shape();
 }
 
 /// Access a BRepBuilderAPI builder's result via its base-class Shape().

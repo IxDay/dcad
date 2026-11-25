@@ -19,10 +19,12 @@ it is either handled locally or needs a follow-up.
 
 2. **No zero-argument constructors for D structs.** `this();` with a body is
    rejected. Default constructors of `BRepBuilderAPI_MakePolygon`,
-   `BRepBuilderAPI_MakeWire` and `STEPControl_Writer` are declared as
-   `pragma(mangle, "_ZN…C1Ev") this(int dummy);` with a dummy argument. It
-   works, but the mangled names are hardcoded. **Risk: low** (Itanium ABI is
-   stable); a C++ factory is the fallback.
+   `BRepBuilderAPI_MakeWire` and `STEPControl_Writer` use
+   `pragma(mangle, cxxMangle!("_ZN…C1Ev", "??0…@@QEAA@XZ")) this(int dummy);`
+   with a dummy argument. All bound C++ members now use `cxxMangle!` so the
+   Itanium names stay unchanged on Linux/macOS and the real Microsoft names
+   (including virtual-member qualifiers) are used on Windows. **Risk: low**;
+   the names are pinned to OCCT 7.7–7.9.
 
 3. **Inline OCCT methods have no out-of-line symbols.** `gp_Pnt::X()`,
    `TopoDS_Shape::IsNull()`, `TopExp_Explorer::More()` etc. are defined in

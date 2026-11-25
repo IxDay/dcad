@@ -66,3 +66,16 @@ enum ChFi3d_FilletShape : int
  * buffer, and D never reads it. C++ objects are never returned by value to D.
  */
 enum size_t opaqueWords = 64;  // 512 bytes on 64-bit targets
+
+/**
+ * Link name for a bound OCCT member on the current C++ ABI.
+ *
+ * OCCT classes are opaque D structs, so LDC emits `U` (struct) type codes on
+ * MSVC where OCCT's real classes use `V`. Virtual members also need `U` instead
+ * of the non-virtual `Q` access code. Explicit names keep both ABIs correct.
+ */
+template cxxMangle(string itanium, string microsoft)
+{
+    version(Windows) enum cxxMangle = microsoft;
+    else enum cxxMangle = itanium;
+}

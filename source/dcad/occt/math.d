@@ -9,7 +9,7 @@
  */
 module dcad.occt.math;
 
-import dcad.occt.types : opaqueWords;
+import dcad.occt.types : opaqueWords, cxxMangle;
 
 extern(C++) struct gp_XYZ
 {
@@ -64,14 +64,19 @@ extern(C++) struct gp_Ax2
 {
     void*[opaqueWords] _opaque;
 
-    this(ref const gp_Pnt origin, ref const gp_Dir normal);
+    pragma(mangle, cxxMangle!(
+        "_ZN6gp_Ax2C1ERK6gp_PntRK6gp_Dir",
+        "??0gp_Ax2@@QEAA@AEBVgp_Pnt@@AEBVgp_Dir@@@Z")) this(ref const gp_Pnt origin, ref const gp_Dir normal);
 }
 
 /// Returned by value from gp_* accessors; here we only need its identity.
 extern(C++) struct gp_Ax1
 {
     void*[opaqueWords] _opaque;
-    this(ref const gp_Pnt origin, ref const gp_Dir direction);
+
+    pragma(mangle, cxxMangle!(
+        "_ZN6gp_Ax1C1ERK6gp_PntRK6gp_Dir",
+        "??0gp_Ax1@@QEAA@AEBVgp_Pnt@@AEBVgp_Dir@@@Z")) this(ref const gp_Pnt origin, ref const gp_Dir direction);
 }
 
 /// Transformation matrix. Bound for completeness; built by C++ methods.
