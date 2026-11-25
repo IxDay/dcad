@@ -11,9 +11,13 @@ module launcher.main;
 
 import std.file : exists, copy, dirEntries, SpanMode;
 import std.path : baseName, buildPath;
-import std.process : execv;
 import std.stdio : stderr, writeln;
 import std.string : toStringz;
+
+version (Posix)
+    import std.process : execv;
+version (Windows)
+    import std.process : spawnProcess, wait;
 
 import launcher.embedded : prepareResources;
 
@@ -97,9 +101,25 @@ int main(string[] args)
                    prependPath("LD_LIBRARY_PATH", libDir).toStringz, 1);
     }
 
-    // execv replaces this process, so exit codes and signals are those of the
-    // GUI itself and no launcher process stays behind.
-    execv(inner, args);
-    stderr.writeln("dcad: failed to start ", inner);
-    return 1;
+    version (Windows)
+    {
+        // The MSVC runtime has no execv, so wait for the GUI and return its
+        // exit code. The launcher stays alive only as its waiting parent.
+        string[] childArgs = [inner] ~ args[1 .. $];
+        try
+            return wait(spawnProcess(childArgs));
+        catch (Exception e)
+        {
+            stderr.writeln("dcad: failed to start ", inner, ": ", e.msg);
+            return 1;
+        }
+    }
+    else
+    {
+        // execv replaces this process, so exit codes and signals are those of
+        // the GUI itself and no launcher process stays behind.
+        execv(inner, args);
+        stderr.writeln("dcad: failed to start ", inner);
+        return 1;
+    }
 }
