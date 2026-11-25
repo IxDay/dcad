@@ -106,7 +106,10 @@ the full script, and `motion.allPoses()` for the knock-down keyframes.
 The editor holds **D source**. On Run the GUI compiles it to a shared library
 with `ldc2`, loads it with `dlopen`, and calls a single exported entry point.
 There are two source forms, both producing the same shape/mesh and using the
-same animation overlay.
+same animation overlay. Release archives include the `source/` modules, sample
+scripts, and static libraries needed for this step beside `dcad-gui`; the GUI
+resolves them through `gui.platform.resourceRoot()` rather than the process
+working directory.
 
 ### Body-style scripts
 

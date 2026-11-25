@@ -9,8 +9,8 @@
  */
 module gui.platform;
 
-import std.path : buildPath;
-import std.file : exists;
+import std.path : buildPath, dirName;
+import std.file : exists, thisExePath;
 import std.string : toStringz, fromStringz;
 import std.conv : to;
 
@@ -37,6 +37,31 @@ int processId()
 {
     version (Windows) return cast(int) GetCurrentProcessId();
     else return cast(int) getpid();
+}
+
+private bool hasGuiAssets(string dir)
+{
+    return exists(buildPath(dir, "samples", "coffee-table", "table.d")) &&
+           (exists(buildPath(dir, "assets")) ||
+            exists(buildPath(dir, "gui", "assets")));
+}
+
+/**
+ * Root for all runtime resources (scripts, icons, fonts, script SDK).
+ *
+ * A release archive keeps these next to the executable, so the GUI must not
+ * depend on the caller's working directory. `dub run :gui` still works from
+ * the repository root, which is detected as the fallback.
+ */
+string resourceRoot()
+{
+    import std.file : getcwd;
+
+    auto exeDir = dirName(thisExePath());
+    if (hasGuiAssets(exeDir)) return exeDir;
+    auto cwd = getcwd();
+    if (hasGuiAssets(cwd)) return cwd;
+    return exeDir;
 }
 
 /**
@@ -119,9 +144,14 @@ string[] pluginLinkArgs(string repoRoot)
     string[] args;
     version (Windows)
     {
-        // CI (and the README recipe) stage prebuilt artifacts here.
+        // CI (and the README recipe) stage prebuilt artifacts here. Release
+        // archives carry the same import libraries in lib/, so prefer those.
         args ~= "-L/LIBPATH:" ~ buildPath(repoRoot, "build");
-        args ~= "-L/LIBPATH:C:\\dcad\\occt\\lib";
+        auto bundledLib = buildPath(repoRoot, "lib");
+        if (exists(buildPath(bundledLib, "TKernel.lib")))
+            args ~= "-L/LIBPATH:" ~ bundledLib;
+        else
+            args ~= "-L/LIBPATH:C:\\dcad\\occt\\lib";
         args ~= "-Ldcad_shim.lib";
         foreach (lib; commonOcctLibraries ~ bundledOcctExtras)
             args ~= "-L" ~ lib ~ ".lib";

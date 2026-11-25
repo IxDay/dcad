@@ -58,8 +58,10 @@ include locations; set `CXX=g++` on Linux if `clang++` is not installed, or
 
 `.github/workflows/build.yml` builds and runs `tests/run.sh` on every target in
 release mode (`DCAD_BUILD_TYPE=release`; local runs default to dub's debug
-build) and packages a native archive (release binary, GUI assets and sample
-scripts) per target.
+build) and packages a native archive per target. Each archive is a self-contained
+runtime directory: the GUI finds icons, fonts, sample scripts, the D import
+sources and static libraries for hot-loaded scripts beside the binary, so it no
+longer depends on the caller's working directory or a source checkout.
 Pushing a tag also publishes those archives as a GitHub Release. On Windows the
 CI downloads the official OCCT 7.9.3 `vc14-64` archive, its matching `3rdparty`
 archive (for `TKernel`'s jemalloc/TBB and the media/image dependencies reached

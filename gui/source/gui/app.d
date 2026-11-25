@@ -15,7 +15,7 @@ import std.algorithm.sorting : sort;
 import std.array : array;
 import std.conv : to;
 
-import gui.platform : processId, nativeHandles;
+import gui.platform : processId, nativeHandles, resourceRoot;
 
 import bindbc.glfw;
 import bindbc.opengl;
@@ -138,6 +138,11 @@ private FileIcon fileIcon(string name)
 
 void main(string[] args)
 {
+    // All runtime files live beside the released binary. In a source checkout
+    // the repository root is found instead, so `dub run :gui` keeps working.
+    immutable root = resourceRoot();
+    dcad_gui_set_resource_root(root.toStringz);
+
     // --- GLFW / OpenGL ----------------------------------------------------
     if (glfwInit() != GLFW_TRUE)
     {
@@ -192,7 +197,6 @@ void main(string[] args)
     immutable workDir = buildPath(tempDir(), "dcad-gui-" ~ processId.to!string);
     mkdirRecurse(workDir);
 
-    immutable root = repoRoot();
     auto host = new ScriptHost(workDir, root);
     auto viewport = new Viewport();
     scope(exit) viewport.dispose(); // context is still current at scope exit
@@ -205,7 +209,7 @@ void main(string[] args)
 
     // Open a real project file, so the tab name is always truthful and Save
     // never needs a hidden scratch destination.
-    dcad_textedit_set_text(editor, readText(defaultFile).toStringz);
+    dcad_textedit_set_text(editor, readText(buildPath(root, defaultFile)).toStringz);
     string currentFile = defaultFile;
 
     string status = "Ready - press Ctrl+Enter (Cmd+Enter) or Run";
@@ -688,11 +692,4 @@ void main(string[] args)
         dcad_gui_render();
         glfwSwapBuffers(window);
     }
-}
-
-private string repoRoot()
-{
-    // The GUI runs from the repository root via `dub run :gui`.
-    import std.file : getcwd;
-    return getcwd();
 }

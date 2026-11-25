@@ -50,6 +50,39 @@ struct GLFWwindow;
  * ImGui lifecycle
  * -------------------------------------------------------------------------- */
 
+// Set by the D host before dcad_gui_init(). Release archives keep the GUI
+// assets beside the binary; source checkouts keep them under gui/assets.
+static std::string g_resourceRoot;
+
+extern "C" void dcad_gui_set_resource_root(const char* root)
+{
+    g_resourceRoot = root ? root : "";
+}
+
+static bool fileExists(const std::string& path)
+{
+    FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) return false;
+    std::fclose(f);
+    return true;
+}
+
+/// Resolve a path relative to the resource root, with legacy cwd fallbacks.
+static std::string findAsset(const std::string& relative)
+{
+    std::vector<std::string> candidates;
+    if (!g_resourceRoot.empty())
+    {
+        candidates.push_back(g_resourceRoot + "/" + relative);
+        candidates.push_back(g_resourceRoot + "/gui/" + relative);
+    }
+    candidates.push_back(relative);
+    candidates.push_back("gui/" + relative);
+    for (const auto& candidate : candidates)
+        if (fileExists(candidate)) return candidate;
+    return candidates.empty() ? std::string() : candidates.front();
+}
+
 static ImFont* addFontFromAsset(ImGuiIO& io, const char* path, float size,
                                 const ImWchar* ranges)
 {
@@ -69,9 +102,10 @@ static void loadGuiFont(ImGuiIO& io)
         std::snprintf(homeFont, sizeof(homeFont),
                       "%s/Library/Fonts/mesloLGS_NF_regular.ttf", home);
 
+    std::string bundledFont = findAsset("assets/MesloLGS_NF_Regular.ttf");
     bool haveTextFont = false;
     const char* textCandidates[] = {
-        "gui/assets/MesloLGS_NF_Regular.ttf",
+        bundledFont.c_str(),
         homeFont,
     };
     for (const char* path : textCandidates)
@@ -104,14 +138,13 @@ extern "C" void* dcad_gui_icon(const char* name)
     if (found != g_iconTextures.end())
         return reinterpret_cast<void*>(found->second);
 
-    char path[512];
-    std::snprintf(path, sizeof(path), "gui/assets/icons/%s.png", name);
+    std::string path = findAsset(std::string("assets/icons/") + name + ".png");
 
     int width = 0, height = 0, channels = 0;
-    unsigned char* pixels = stbi_load(path, &width, &height, &channels, 4);
+    unsigned char* pixels = stbi_load(path.c_str(), &width, &height, &channels, 4);
     if (!pixels)
     {
-        std::fprintf(stderr, "gui icon not found: %s\n", path);
+        std::fprintf(stderr, "gui icon not found: %s\n", path.c_str());
         g_iconTextures[name] = 0;
         return nullptr;
     }

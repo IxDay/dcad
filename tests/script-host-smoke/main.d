@@ -7,16 +7,16 @@
 module script_host_smoke;
 
 import std.stdio : writeln, stderr;
-import std.file : readText, mkdirRecurse, getcwd, tempDir;
+import std.file : readText, mkdirRecurse, tempDir;
 import std.path : buildPath;
 import std.conv : to;
-import gui.platform : processId;
+import gui.platform : processId, resourceRoot;
 
 import gui.script_host : ScriptHost;
 
 int main()
 {
-    immutable root = getcwd();
+    immutable root = resourceRoot();
     immutable workDir = buildPath(tempDir(), "dcad-script-host-smoke-"
                                   ~ processId.to!string);
     mkdirRecurse(workDir);

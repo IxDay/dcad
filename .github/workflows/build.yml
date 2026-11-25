@@ -131,22 +131,34 @@ jobs:
           ldc2 --version
           bash tests/run.sh
 
-      # A bare GUI binary cannot find its assets or default script, so each
-      # artifact is a small payload directory: binary + runtime data. Windows
-      # also carries the OCCT/GLFW DLLs it links against.
+      # The released GUI resolves every runtime file beside the binary: assets,
+      # sample scripts, the D sources/import libs needed to hot-load scripts,
+      # and (on Windows) the OCCT/GLFW DLLs and import libs it links against.
       - name: Package target
         run: |
           set -eu
           TARGET="dcad-${{ matrix.name }}"
-          mkdir -p "payload/$TARGET" dist
+          mkdir -p "payload/$TARGET/build" dist
           if [ -f dcad-gui ]; then
             cp dcad-gui "payload/$TARGET/"
           else
             cp dcad-gui.exe "payload/$TARGET/"
           fi
-          cp -R README.md gui/assets samples "payload/$TARGET/"
+          cp -R README.md samples source "payload/$TARGET/"
+          cp -R gui/assets "payload/$TARGET/assets"
+          mkdir -p "payload/$TARGET/gui"
+          cp -R gui/scripts "payload/$TARGET/gui/scripts"
+          if [ -f libdcad.a ]; then
+            cp libdcad.a "payload/$TARGET/"
+            cp build/libdcad_shim.a "payload/$TARGET/build/"
+          else
+            cp dcad.lib "payload/$TARGET/"
+            cp build/dcad_shim.lib "payload/$TARGET/build/"
+          fi
           if [ -d /c/dcad/occt/bin ]; then
+            mkdir -p "payload/$TARGET/lib"
             cp /c/dcad/occt/bin/*.dll "payload/$TARGET/"
+            cp /c/dcad/occt/lib/*.lib "payload/$TARGET/lib/"
           fi
           tar -czf "dist/$TARGET.tar.gz" -C payload "$TARGET"
 

@@ -55,6 +55,7 @@ struct DcadMesh
 extern(C) nothrow @nogc
 {
     // lifecycle
+    void dcad_gui_set_resource_root(const(char)* root);
     void dcad_gui_init(void* window, const(char)* glslVersion);
     void dcad_gui_apply_light_theme();
     void dcad_gui_apply_zed_theme();
