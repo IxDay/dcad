@@ -317,6 +317,7 @@ private:
     string[] importPaths;
     string[] extraSources;
     DynamicLibrary lib;
+    string loadedDylibPath;
     int generation;
 
 public:
@@ -373,14 +374,16 @@ public:
         write(srcPath, prelude ~ "\n"
               ~ (moduleForm ? moduleBodyEnd(modName) : source ~ "\n" ~ bodyEnd)
               ~ tail ~ "\n");
-        // Nothing generated is kept: the mapping survives unlinking on POSIX,
-        // and closing the library only needs the loaded handle, not the path.
+        // Sources/objects are never kept. A loaded DLL cannot be deleted on
+        // Windows, so its path is retained until the next unload()/destructor;
+        // POSIX could unlink it immediately, but the same rule keeps both
+        // platforms on one code path.
         scope(exit)
         {
             if (exists(srcPath)) remove(srcPath);
             if (modSrcPath.length && exists(modSrcPath)) remove(modSrcPath);
             if (exists(objPath)) remove(objPath);
-            if (exists(dylibPath)) remove(dylibPath);
+            if (!lib.loaded && exists(dylibPath)) remove(dylibPath);
         }
 
         string[] cmd = ["ldc2", "-shared", "-relocation-model=pic"];
@@ -412,6 +415,7 @@ public:
         lib = DynamicLibrary.open(dylibPath, loadError);
         if (!lib.loaded)
             return RunResult(null, loadError);
+        loadedDylibPath = dylibPath;
 
         alias RunFn = extern(C) void* function();
         alias ErrFn = extern(C) const(char)* function();
@@ -504,6 +508,12 @@ private:
             auto freeFn = cast(FreeFn) lib.symbol("dcad_anim_free");
             if (freeFn !is null) freeFn();
             lib.close();
+        }
+        // Close before deleting: Windows keeps a loaded DLL file locked.
+        if (loadedDylibPath.length)
+        {
+            if (exists(loadedDylibPath)) remove(loadedDylibPath);
+            loadedDylibPath = null;
         }
     }
 
