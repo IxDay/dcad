@@ -82,8 +82,9 @@ its diagnostics go to `gui.log` in the extracted cache and fatal errors use a
 message box. The Linux archive includes a `Terminal=false` desktop entry for
 the same behaviour.
 
-The Windows archive also embeds a private LDC toolchain and a portable COFF
-linker, so hot reload works without installing D, LDC or Visual Studio. Source
+The Windows archive also embeds a private LDC toolchain, a portable COFF
+linker, and the matching static MSVC CRT/Win32 import libraries, so hot reload
+works without installing D, LDC or Visual Studio. Source
 checkouts still use the `ldc2` on `PATH`; a missing compiler is reported in the
 editor rather than exiting the application. The interface follows the display's
 HiDPI scale automatically; set `DCAD_UI_SCALE` to override it (for example,

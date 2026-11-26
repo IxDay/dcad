@@ -458,19 +458,18 @@ public:
                         "bundled ldc2 is missing lld-link.exe");
                 cmd ~= "--linker=lld-link";
                 immutable toolLib = buildPath(repoRoot, "toolchain", "lib");
+                // The shims are built with /MT, so the plugin needs the same
+                // static MSVC CRT and Win32 import libraries lld would
+                // normally find through Visual Studio's LIB. Those are staged
+                // in the payload; search them first so SDK libraries win over
+                // LDC's MinGW import libraries with the same names.
+                cmd ~= "-L/LIBPATH:" ~ buildPath(toolLib, "msvc");
                 cmd ~= "-L/LIBPATH:" ~ toolLib;
                 cmd ~= "-L/LIBPATH:" ~ buildPath(toolLib, "mingw");
                 // Visual Studio normally supplies these through LIB. The
                 // staged LDC libs cover UCRT and vcruntime; the generated
                 // import library supplies the legacy names Phobos references
                 // (execv, fileno, open, tzset, ...) from ucrtbase.dll.
-                // ldc_rt.builtins injects /DEFAULTLIB:libcmt, which on a
-                // developer machine pulls the static CRT and its libucrt
-                // defaults. Those clash with the DLL CRT below.
-                cmd ~= "-L/NODEFAULTLIB:libcmt";
-                cmd ~= "-L/NODEFAULTLIB:libcmtd";
-                cmd ~= "-L/NODEFAULTLIB:libucrt";
-                cmd ~= "-L/DEFAULTLIB:ucrtbase";
                 cmd ~= "-L/DEFAULTLIB:dcad-crt-legacy";
                 childEnv = environment.toAA();
                 // execute() merges a supplied env with the parent's unless

@@ -34,6 +34,10 @@ def main():
                 "toolchain/lib/druntime-ldc.lib",
                 "toolchain/lib/phobos2-ldc.lib",
                 "toolchain/lib/dcad-crt-legacy.lib",
+                "toolchain/lib/msvc/libcmt.lib",
+                "toolchain/lib/msvc/libcpmt.lib",
+                "toolchain/lib/msvc/libucrt.lib",
+                "toolchain/lib/msvc/kernel32.lib",
                 "toolchain/lib/mingw/msvcrt.lib",
             ]
             missing = [name for name in required if name not in names]

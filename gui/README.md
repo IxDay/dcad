@@ -22,9 +22,10 @@ suppresses the child console; it redirects the GUI's stdout/stderr to `gui.log`
 next to the extracted binary and reports startup failures in a message box.
 Linux includes a `Terminal=false` desktop entry.
 
-The Windows release embeds a private LDC compiler, its D imports/libraries and a
-portable `lld-link`, so hot reload works with no compiler install and without
-Visual Studio. A source checkout uses the `ldc2` on `PATH`; if it is missing the
+The Windows release embeds a private LDC compiler, its D imports/libraries, a
+portable `lld-link`, and the static MSVC CRT/Win32 import libraries used by the
+C++ shims, so hot reload works with no compiler install and without Visual
+Studio. A source checkout uses the `ldc2` on `PATH`; if it is missing the
 error is shown in the editor instead of terminating the GUI.
 
 The interface follows the monitor's HiDPI scale: fonts, spacing, panes and icon

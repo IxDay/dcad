@@ -223,13 +223,72 @@ def windows_libraries(stage):
     return any(lib.glob("*.dll"))
 
 
+MSVC_LINK_LIBS = [
+    # /MT C++ shims and D runtime objects need the static CRT, its C++ library
+    # and the Win32 import libraries normally supplied by Visual Studio's LIB.
+    "libcmt.lib",
+    "libvcruntime.lib",
+    "libucrt.lib",
+    "libcpmt.lib",
+    "kernel32.lib",
+    "user32.lib",
+    "gdi32.lib",
+    "winspool.lib",
+    "shell32.lib",
+    "ole32.lib",
+    "oleaut32.lib",
+    "uuid.lib",
+    "comdlg32.lib",
+    "advapi32.lib",
+    "oldnames.lib",
+    "legacy_stdio_definitions.lib",
+]
+
+
+def msvc_library_dirs():
+    """Directories containing the MSVC and Windows SDK linker inputs."""
+    dirs = []
+    vc = os.environ.get("VCToolsInstallDir") or os.environ.get("VCINSTALLDIR")
+    if vc:
+        dirs.append(Path(vc) / "lib" / "x64")
+    kit = os.environ.get("UniversalCRTSdkDir") or os.environ.get("WindowsSdkDir")
+    ucrt_version = os.environ.get("UCRTVersion")
+    if kit and ucrt_version:
+        dirs.append(Path(kit) / "Lib" / ucrt_version / "ucrt" / "x64")
+    sdk = os.environ.get("WindowsSdkDir")
+    sdk_version = os.environ.get("WindowsSDKVersion") or os.environ.get("WindowsSdkDirVersion")
+    if sdk and sdk_version:
+        dirs.append(Path(sdk) / "Lib" / sdk_version / "um" / "x64")
+    return [p for p in dirs if p.is_dir()]
+
+
+def stage_msvc_libraries(tool):
+    """Copy the linker inputs a bundled Windows script needs from CI's MSVC."""
+    dirs = msvc_library_dirs()
+    if not dirs:
+        return 0
+    target = tool / "lib" / "msvc"
+    target.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    for name in MSVC_LINK_LIBS:
+        for directory in dirs:
+            source = directory / name
+            if source.is_file():
+                copy_file(source, target / name)
+                copied += 1
+                break
+    return copied
+
+
 def windows_toolchain(stage):
     """Bundle a private LDC so hot reload works without a host compiler.
 
     CI downloads the official LDC Windows package and a portable lld-link
     (from Rust's redistributable rust-lld). Only the files ldc2 needs to compile
-    a plugin are kept: the compiler, its import libraries and D sources, and a
-    COFF linker. A user's PATH and Visual Studio install are not involved.
+    a plugin are kept: the compiler, its import libraries and D sources, a COFF
+    linker, and the MSVC CRT/Win32 import libraries that lld would otherwise
+    find through Visual Studio. A user's PATH and Visual Studio install are not
+    involved.
     """
     roots = []
     env_root = os.environ.get("DCAD_LDC_ROOT")
@@ -266,6 +325,7 @@ def windows_toolchain(stage):
     copy_tree(ldc_root / "import", tool / "import", skip=("*.pdb",))
     copy_tree(ldc_root / "lib", tool / "lib", skip=("*.pdb",))
     (tool / "lib" / "dcad-crt-legacy.lib").write_bytes(build_crt_lib())
+    stage_msvc_libraries(tool)
 
     licenses = tool / "licenses"
     for base in [ldc_root] + list(linker.parents)[:8]:
