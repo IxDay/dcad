@@ -91,16 +91,21 @@ if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
             test -f "$ROOT/toolchain/lib/msvc/kernel32.lib"
             test -f "$ROOT/toolchain/lib/msvc/legacy_stdio_wide_specifiers.lib"
             test -f "$ROOT/toolchain/lib/mingw/msvcrt.lib"
-
-            # The same scripts now compile through the bundled compiler with
-            # no Visual Studio LIB/INCLUDE environment. PATH is left intact so
-            # OCCT's DLLs remain findable.
-            (
-                unset LIB INCLUDE
-                DCAD_SCRIPT_HOST_ROOT="$ROOT" ./dcad-script-host-smoke.exe
-            )
+            SMOKE_BIN=./dcad-script-host-smoke.exe
+            ;;
+        *)
+            SMOKE_BIN=./dcad-script-host-smoke
             ;;
     esac
+
+    # The shipped plugins must load without recompiling. The same smoke binary
+    # still verifies ordinary compilation through the bundled Windows compiler
+    # with no Visual Studio LIB/INCLUDE environment. PATH is left intact so
+    # OCCT's DLLs remain findable.
+    (
+        unset LIB INCLUDE
+        DCAD_SCRIPT_HOST_ROOT="$ROOT" DCAD_CHECK_PRECOMPILED=1 "$SMOKE_BIN"
+    )
 
     # Start the embedded GUI once without creating a window. This catches a
     # launcher that cannot spawn its child even when --print-root succeeds.

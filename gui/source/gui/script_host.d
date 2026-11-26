@@ -16,13 +16,13 @@
  */
 module gui.script_host;
 
-import std.stdio : File;
-import std.file : write, remove, exists, dirEntries, SpanMode;
-import std.path : buildPath, dirName;
+import std.stdio : File, stderr;
+import std.file : write, remove, exists, readText, dirEntries, SpanMode;
+import std.path : buildPath, dirName, baseName;
 import std.process : Config, execute, environment;
 import std.regex : ctRegex, matchFirst, replaceFirst;
 import std.algorithm.sorting : sort;
-import std.string : replace, toStringz, fromStringz;
+import std.string : replace, toStringz, fromStringz, strip;
 import std.conv : to;
 import gui.platform : DynamicLibrary, sharedLibraryExtension, pluginLinkArgs;
 
@@ -297,6 +297,31 @@ private size_t nextScriptGeneration()
 
 private enum moduleDecl = ctRegex!`(?m)^\s*module\s+[\w.]+\s*;`;
 
+// Bump this whenever the generated wrapper ABI or compile flags change. It is
+// part of the key for plugins precompiled at release-build time.
+private enum string pluginCacheVersion = "dcad-plugin-key-v1";
+
+private void hashByte(ref ulong hash, ubyte b)
+{
+    hash ^= b;
+    hash *= 1099511628211UL;
+}
+
+private void hashText(ref ulong hash, string text)
+{
+    foreach (b; text) hashByte(hash, cast(ubyte) b);
+    hashByte(hash, 0);
+}
+
+private string hexKey(ulong value)
+{
+    enum digits = "0123456789abcdef";
+    char[16] buf = void;
+    foreach (i; 0 .. 16)
+        buf[15 - i] = digits[(value >> (i * 4)) & 0xf];
+    return buf.idup;
+}
+
 /// A source with a module declaration is a real D module rather than a body.
 private bool isModuleSource(string source)
 {
@@ -345,6 +370,7 @@ private:
     string[] extraSources;
     DynamicLibrary lib;
     string loadedDylibPath;
+    bool ownsDylib;
 
 public:
     this(string workDir, string repoRoot)
@@ -378,6 +404,65 @@ public:
     ~this()
     {
         unload();
+    }
+
+    /// Identity of the generated plugin for this editor text plus the project
+    /// modules compiled alongside it. Release builds write this beside each
+    /// precompiled plugin so startup can verify it before loading.
+    string sourceCacheKey(string source)
+    {
+        ulong hash = 1469598103934665603UL;
+        hashText(hash, pluginCacheVersion);
+        hashText(hash, source);
+        foreach (path; extraSources)
+        {
+            hashText(hash, baseName(path));
+            try
+                hashText(hash, readText(path));
+            catch (Exception)
+                hashText(hash, "missing");
+        }
+        return hexKey(hash);
+    }
+
+    /// Path of the currently loaded image, used by the build-time plugin
+    /// emitter to copy a freshly compiled image into the release payload.
+    string loadedPath() const { return loadedDylibPath; }
+
+    /// Load a plugin shipped with the release when its key still matches. If
+    /// it is missing, stale, or cannot be loaded, compile the source normally.
+    RunResult runPrecompiled(string source, string pluginBase)
+    {
+        if (pluginBase.length)
+        {
+            try
+            {
+                immutable key = sourceCacheKey(source);
+                immutable plugin = buildPath(repoRoot,
+                    pluginBase ~ sharedLibraryExtension());
+                immutable keyPath = buildPath(repoRoot, pluginBase ~ ".key");
+                immutable debugCache = environment.get(
+                    "DCAD_DEBUG_PRECOMPILED", "") == "1";
+                if (debugCache)
+                    stderr.writeln("script cache: try ", plugin, " key=", key);
+                if (exists(plugin) && exists(keyPath) &&
+                    readText(keyPath).strip == key)
+                {
+                    auto cached = loadPlugin(plugin, false);
+                    if (cached.ok()) return cached;
+                    if (debugCache)
+                        stderr.writeln("script cache: rejected ",
+                                       cached.error);
+                }
+            }
+            catch (Exception e)
+            {
+                // A bad cache must never prevent a normal compile.
+                if (environment.get("DCAD_DEBUG_PRECOMPILED", "") == "1")
+                    stderr.writeln("script cache: exception ", e.msg);
+            }
+        }
+        return run(source);
     }
 
     /// Compile and run the given script source. Returns a cloned shape that
@@ -516,34 +601,7 @@ public:
             return RunResult(null, msg);
         }
 
-        string loadError;
-        lib = DynamicLibrary.open(dylibPath, loadError);
-        if (!lib.loaded)
-            return RunResult(null, loadError);
-        loadedDylibPath = dylibPath;
-
-        alias RunFn = extern(C) void* function();
-        alias ErrFn = extern(C) const(char)* function();
-        auto runFn = cast(RunFn) lib.symbol("dcad_script_run");
-        auto errFn = cast(ErrFn) lib.symbol("dcad_script_error");
-        if (runFn is null || errFn is null)
-        {
-            unload();
-            return RunResult(null, "plugin missing dcad_script_run/ dcad_script_error");
-        }
-
-        auto p = runFn();
-        if (p is null)
-        {
-            import std.string : fromStringz;
-            auto err = fromStringz(errFn()).idup;
-            unload();
-            return RunResult(null, err.length ? err : "script returned no shape");
-        }
-
-        auto shape = new Shape(*cast(TopoDS_Shape*) p);
-        dcad_shape_free(p);
-        return RunResult(shape, null);
+        return loadPlugin(dylibPath, true);
     }
 
     /// True when the loaded script exported at least one animation part.
@@ -604,6 +662,41 @@ public:
     }
 
 private:
+    /// Open a plugin, run its ABI entry point and clone the resulting shape.
+    /// `owned` is false for plugins shipped in the payload, which must never
+    /// be deleted by unload().
+    RunResult loadPlugin(string path, bool owned)
+    {
+        string loadError;
+        lib = DynamicLibrary.open(path, loadError);
+        if (!lib.loaded)
+            return RunResult(null, loadError);
+        loadedDylibPath = path;
+        ownsDylib = owned;
+
+        alias RunFn = extern(C) void* function();
+        alias ErrFn = extern(C) const(char)* function();
+        auto runFn = cast(RunFn) lib.symbol("dcad_script_run");
+        auto errFn = cast(ErrFn) lib.symbol("dcad_script_error");
+        if (runFn is null || errFn is null)
+        {
+            unload();
+            return RunResult(null, "plugin missing dcad_script_run/ dcad_script_error");
+        }
+
+        auto p = runFn();
+        if (p is null)
+        {
+            auto err = fromStringz(errFn()).idup;
+            unload();
+            return RunResult(null, err.length ? err : "script returned no shape");
+        }
+
+        auto shape = new Shape(*cast(TopoDS_Shape*) p);
+        dcad_shape_free(p);
+        return RunResult(shape, null);
+    }
+
     void unload()
     {
         if (lib.loaded)
@@ -615,10 +708,12 @@ private:
             lib.close();
         }
         // Close before deleting: Windows keeps a loaded DLL file locked.
+        // Payload plugins are not scratch files and must stay in the cache.
         if (loadedDylibPath.length)
         {
-            if (exists(loadedDylibPath)) remove(loadedDylibPath);
+            if (ownsDylib && exists(loadedDylibPath)) remove(loadedDylibPath);
             loadedDylibPath = null;
+            ownsDylib = false;
         }
     }
 

@@ -14,7 +14,7 @@ import std.file : exists, mkdirRecurse, readText, remove, rename, write,
 import std.path : buildPath, dirName;
 import std.zip : ZipArchive;
 import std.conv : to;
-import std.string : toStringz, fromStringz;
+import std.string : toStringz, fromStringz, strip;
 
 /// Where the extracted runtime lives, and whether it has native libraries.
 struct ResourceState
@@ -77,15 +77,41 @@ const(ubyte)[] payloadBytes()
         return null;
 }
 
-/// FNV-1a over the payload gives each distinct build its own cache directory.
+/// The payload carries a tiny build marker. Reading that one ZIP member is
+/// much cheaper than hashing the whole embedded archive on every launch.
+/// Older archives without the marker fall back to a bounded sample hash.
 private string versionTag(const(ubyte)[] bytes)
 {
+    try
+    {
+        auto zip = new ZipArchive(cast(void[]) bytes);
+        if (auto member = "dcad-version.txt" in zip.directory)
+        {
+            zip.expand(*member);
+            auto text = cast(string) member.expandedData;
+            if (text.length)
+                return text.strip.idup;
+        }
+    }
+    catch (Exception)
+    {
+        // Corrupt marker: fall through to the bounded hash below.
+    }
+
+    enum sampleSize = 65536;
     ulong hash = 1469598103934665603UL;
-    foreach (b; bytes)
+    void mix(ubyte b)
     {
         hash ^= b;
         hash *= 1099511628211UL;
     }
+    foreach (b; bytes[0 .. bytes.length < sampleSize ? bytes.length : sampleSize])
+        mix(b);
+    if (bytes.length > sampleSize)
+        foreach (b; bytes[$ - sampleSize .. $])
+            mix(b);
+    foreach (b; bytes.length.to!string)
+        mix(cast(ubyte) b);
     return hash.to!string;
 }
 

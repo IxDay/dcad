@@ -8,6 +8,7 @@ module gui.viewport;
 import std.math : sin, cos, atan, sqrt, PI;
 import std.stdio : stderr;
 import std.string : toStringz;
+import std.process : environment;
 
 import bindbc.opengl;
 import gui.imgui : DcadMesh, dcad_mesh_shape, dcad_mesh_free;
@@ -213,6 +214,8 @@ private:
     float[3][] partOffsets;
     int highlightPart = -1;
     bool diagnosticsDone;
+    bool diagnosticsEnabled;
+    bool woodReady;
     bool disposed;
 
     int width = 64;
@@ -229,6 +232,10 @@ private:
 public:
     this()
     {
+        // The first-frame GPU readback is useful when debugging a blank
+        // preview, but it stalls the pipeline for several megabytes. Normal
+        // launches should not pay that cost.
+        diagnosticsEnabled = environment.get("DCAD_DIAGNOSTICS", "") == "1";
         initGL();
     }
 
@@ -547,6 +554,11 @@ public:
                 drawGuides(proj, view);
 
             immutable si = cast(int) shaderMode;
+            if (si == 1 && !woodReady)
+            {
+                initSurfaceProgram(1, woodFragmentShaderSrc);
+                woodReady = true;
+            }
             glUseProgram(programs[si]);
             glUniformMatrix4fv(projLocs[si], 1, GL_FALSE, proj.ptr);
             glUniformMatrix4fv(viewLocs[si], 1, GL_FALSE, view.ptr);
@@ -571,7 +583,7 @@ public:
             glDisableVertexAttribArray(normLocs[si]);
         }
 
-        if (!diagnosticsDone)
+        if (diagnosticsEnabled && !diagnosticsDone)
         {
             diagnosticsDone = true;
             logDiagnostics();
@@ -612,21 +624,25 @@ private:
         glDrawArrays(GL_TRIANGLES, 0, g.vertexCount);
     }
 
+    void initSurfaceProgram(int i, string fragmentSrc)
+    {
+        programs[i] = createProgram(vertexShaderSrc, fragmentSrc.toStringz);
+        projLocs[i] = glGetUniformLocation(programs[i], "uProj");
+        viewLocs[i] = glGetUniformLocation(programs[i], "uView");
+        offsetLocs[i] = glGetUniformLocation(programs[i], "uOffset");
+        highlightLocs[i] = glGetUniformLocation(programs[i], "uHighlight");
+        posLocs[i] = glGetAttribLocation(programs[i], "aPosition");
+        normLocs[i] = glGetAttribLocation(programs[i], "aNormal");
+    }
+
     void initGL()
     {
-        foreach (i, src; [fragmentShaderSrc, woodFragmentShaderSrc])
-        {
-            programs[i] = createProgram(vertexShaderSrc, src.toStringz);
-            projLocs[i] = glGetUniformLocation(programs[i], "uProj");
-            viewLocs[i] = glGetUniformLocation(programs[i], "uView");
-            offsetLocs[i] = glGetUniformLocation(programs[i], "uOffset");
-            highlightLocs[i] = glGetUniformLocation(programs[i], "uHighlight");
-            posLocs[i] = glGetAttribLocation(programs[i], "aPosition");
-            normLocs[i] = glGetAttribLocation(programs[i], "aNormal");
-        }
-        stderr.writefln("viewport: shaders=%u,%u proj=%d,%d pos=%d,%d norm=%d,%d",
-                        programs[0], programs[1], projLocs[0], projLocs[1],
-                        posLocs[0], posLocs[1], normLocs[0], normLocs[1]);
+        // Wood is only compiled when the menu selects it; most launches never
+        // use it, and ANGLE's first shader compile can be noticeable.
+        initSurfaceProgram(0, fragmentShaderSrc);
+        stderr.writefln("viewport: shader=%u proj=%d pos=%d norm=%d "
+                        ~ "(wood compiled on demand)",
+                        programs[0], projLocs[0], posLocs[0], normLocs[0]);
         lineProgram = createProgram(lineVertexShaderSrc, lineFragmentShaderSrc);
         lineProjLoc = glGetUniformLocation(lineProgram, "uProj");
         lineViewLoc = glGetUniformLocation(lineProgram, "uView");

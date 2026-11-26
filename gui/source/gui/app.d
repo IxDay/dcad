@@ -136,6 +136,21 @@ private string partSourceFile(string id, string projectRoot)
     return null;
 }
 
+/// Name of a release plugin that can replace the first startup compile. The
+/// key beside the plugin is checked before it is used, so a user-edited source
+/// still falls back to the normal compiler.
+private string precompiledBase(string root, string projectRoot,
+                               string currentFile)
+{
+    if (projectRoot == buildPath(root, "samples", "coffee-table") &&
+        currentFile == "table.d")
+        return "dcad-coffee-table";
+    if (currentFile == "main.d" &&
+        exists(buildPath(projectRoot, ".dcad.toml")))
+        return "dcad-daimochi";
+    return null;
+}
+
 private void* iconTexture(string name)
 {
     if (auto cached = name in iconCache)
@@ -477,7 +492,8 @@ void main(string[] args)
         auto src = fromStringz(dcad_textedit_get_text(editor)).idup;
         RunResult result;
         try
-            result = host.run(src);
+            result = host.runPrecompiled(
+                src, precompiledBase(root, projectRoot, currentFile));
         catch (Exception e)
             result = RunResult(null, "script host failed: " ~ e.msg);
         if (result.ok())

@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 from make_crt_lib import build as build_crt_lib
@@ -81,6 +82,8 @@ def stage_runtime_files(stage):
     copy_file(ROOT / "dcad-gui", stage / "dcad-gui")
     copy_file(BUILD / "libdcad_shim.a", stage / "build" / "libdcad_shim.a")
     copy_file(ROOT / "libdcad.a", stage / "libdcad.a")
+    for path, name in plugin_files():
+        copy_file(path, stage / name)
 
 
 def macos_libraries(stage):
@@ -130,6 +133,16 @@ def macos_libraries(stage):
                 shutil.copy2(path, lib / short)
         if path.name.startswith("libglfw."):
             shutil.copy2(path, lib / "libglfw.dylib")
+
+    # install_name_tool invalidates the Homebrew signatures. A plugin loaded
+    # with dlopen resolves these staged dylibs through @rpath and dyld kills
+    # the process with "Code Signature Invalid" if any one of them is stale.
+    codesign = shutil.which("codesign")
+    if codesign:
+        for path in sorted(lib.glob("*.dylib")):
+            subprocess.run([codesign, "--force", "--sign", "-", str(path)],
+                           check=True, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
 
     (BUILD / "dcad_dylibs.txt").write_text(
         "\n".join(p.name for p in copied) + "\n")
@@ -221,6 +234,74 @@ def windows_libraries(stage):
         for path in target.glob(pattern):
             shutil.copy2(path, lib / path.name)
     return any(lib.glob("*.dll"))
+
+
+# Plugins shipped in the payload so the first GUI run does not invoke ldc2.
+# Each entry is (base name, project directory, entry source within it).
+PRECOMPILED_PLUGINS = [
+    ("dcad-coffee-table", ROOT / "samples" / "coffee-table", "table.d"),
+    ("dcad-daimochi", ROOT / "project-template" / "daimochi", "main.d"),
+]
+
+
+def plugin_extension():
+    if WINDOWS:
+        return ".dll"
+    if MACOS:
+        return ".dylib"
+    return ".so"
+
+
+def plugin_files():
+    """Payload paths for the precompiled plugins and their source keys."""
+    for base, _, _ in PRECOMPILED_PLUGINS:
+        for suffix in (plugin_extension(), ".key"):
+            path = BUILD / (base + suffix)
+            if path.is_file():
+                yield path, path.name
+
+
+def macos_finalize_plugin(path):
+    """Point a precompiled plugin's OCCT imports at the payload's lib/."""
+    if not MACOS or not path.is_file():
+        return
+    output = subprocess.run(["otool", "-L", str(path)], check=True,
+                            capture_output=True, text=True).stdout
+    changes = []
+    for line in output.splitlines()[1:]:
+        old = line.strip().split()[0]
+        name = Path(old).name
+        if name.startswith("libTK") and ("opencascade" in old or
+                                          "/lib/libTK" in old):
+            new = "@rpath/" + name
+            if old != new:
+                changes.append((old, new))
+    for old, new in changes:
+        subprocess.run(["install_name_tool", "-change", old, new, str(path)],
+                       check=True)
+    subprocess.run(["install_name_tool", "-id", "@rpath/" + path.name,
+                    str(path)], check=True)
+    if shutil.which("codesign"):
+        subprocess.run(["codesign", "--force", "--sign", "-", str(path)],
+                       check=True)
+
+
+def precompile_plugins():
+    """Compile the bundled projects once at build time using the script host."""
+    smoke = ROOT / ("dcad-script-host-smoke.exe" if WINDOWS
+                    else "dcad-script-host-smoke")
+    if not smoke.is_file():
+        print("  SKIP precompiled plugins (build dcad-script-host-smoke first)",
+              flush=True)
+        return
+    env = os.environ.copy()
+    env["DCAD_PLUGIN_EMIT"] = "1"
+    for base, project_dir, entry in PRECOMPILED_PLUGINS:
+        subprocess.run([
+            str(smoke), "--emit-plugin", str(BUILD / base),
+            str(project_dir), entry,
+        ], check=True, env=env)
+        macos_finalize_plugin(BUILD / (base + plugin_extension()))
 
 
 MSVC_LINK_LIBS = [
@@ -348,9 +429,23 @@ def main():
         shutil.rmtree(stage)
     stage.mkdir(parents=True)
 
+    if embedded:
+        print("  PRECOMPILE bundled scripts", flush=True)
+        precompile_plugins()
+        print("  PRECOMPILE bundled scripts done", flush=True)
+
     has_libs = False
     has_compiler = False
+    # Cache identity is read from this tiny member at startup. Hashing the
+    # whole embedded ZIP on every launch costs hundreds of milliseconds for
+    # the Windows payload; a build-time marker is both cheaper and exact.
+    build_version = os.environ.get("GITHUB_SHA", "")
+    if not build_version:
+        build_version = "local-" + datetime.now(timezone.utc).strftime(
+            "%Y%m%d%H%M%S")
+
     with zipfile.ZipFile(PAYLOAD, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+        zf.writestr("dcad-version.txt", build_version + "\n")
         if embedded:
             # The shim resolves icons/fonts as <root>/assets/..., while the
             # source checkout keeps them under gui/assets.
@@ -370,6 +465,8 @@ def main():
                      "build/" + ("dcad_shim.lib" if WINDOWS else "libdcad_shim.a"))
             add_file(zf, ROOT / ("dcad.lib" if WINDOWS else "libdcad.a"),
                      "dcad.lib" if WINDOWS else "libdcad.a")
+            for path, name in plugin_files():
+                add_file(zf, path, name)
 
             print("  STAGE platform libraries", flush=True)
             if WINDOWS:

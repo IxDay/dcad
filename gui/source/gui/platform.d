@@ -13,6 +13,7 @@ import std.path : buildPath, dirName;
 import std.file : exists, thisExePath, getcwd;
 import std.string : toStringz, fromStringz;
 import std.conv : to;
+import std.process : environment;
 
 version (Windows)
 {
@@ -183,6 +184,13 @@ string[] pluginLinkArgs(string repoRoot)
             args ~= "-L-rpath";
             args ~= "-L/opt/homebrew/lib";
             args ~= "-L-L/usr/local/lib";
+        }
+        // Only payload plugins need to find the staged lib/ beside them.
+        // Hot-loaded scratch plugins keep the checkout's normal resolution.
+        if (environment.get("DCAD_PLUGIN_EMIT", "") == "1")
+        {
+            args ~= "-L-rpath";
+            args ~= "-L@loader_path/lib";
         }
         foreach (lib; commonOcctLibraries ~ bundledOcctExtras)
             args ~= "-L-l" ~ lib;

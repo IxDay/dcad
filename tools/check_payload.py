@@ -14,6 +14,19 @@ def main():
         manifest = zf.read("embedded.manifest").decode("utf-8")
         if "dcad=1\n" not in manifest:
             raise SystemExit("launcher payload is missing the embedded GUI")
+        version = zf.read("dcad-version.txt").decode("utf-8").strip()
+        if not version:
+            raise SystemExit("launcher payload has an empty build version marker")
+        if sys.platform == "win32":
+            extension = ".dll"
+        elif sys.platform == "darwin":
+            extension = ".dylib"
+        else:
+            extension = ".so"
+        for base in ("dcad-coffee-table", "dcad-daimochi"):
+            for name in (base + extension, base + ".key"):
+                if name not in names:
+                    raise SystemExit("missing precompiled plugin: " + name)
         nested = [name for name in names if name.startswith("lib/lib/")]
         if nested:
             raise SystemExit(

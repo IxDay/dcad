@@ -9,19 +9,57 @@ module script_host_smoke;
 import std.stdio : writeln, stderr;
 import std.algorithm : startsWith;
 import std.algorithm.searching : canFind;
-import std.file : exists, readText, mkdirRecurse, tempDir, getcwd, chdir;
+import std.file : exists, readText, mkdirRecurse, tempDir, getcwd, chdir,
+                  copy, write;
 import std.path : baseName, buildPath;
 import std.process : environment;
 import std.conv : to;
 import gui.agent : AgentMessage, AgentRole, agentCacheDir,
                    decodeAgentLine, makeSessionId;
 import gui.imgui : dcad_gui_font_selftest;
-import gui.platform : processId, resourceRoot;
+import gui.platform : processId, resourceRoot, sharedLibraryExtension;
 import gui.project : Project;
 import gui.script_host : ScriptHost;
 
-int main()
+int main(string[] args)
 {
+    // Release CI points this at the extracted launcher payload, so the same
+    // script tests run against the private toolchain shipped to users.
+    immutable overrideRoot = environment.get("DCAD_SCRIPT_HOST_ROOT", "");
+    immutable root = overrideRoot.length ? overrideRoot : resourceRoot();
+
+    // Build-time mode: compile a project's plugin and copy it, with its source
+    // key, into build/ so the payload can load it without invoking ldc2 on
+    // startup. This uses the same ScriptHost path as an ordinary Run.
+    if (args.length >= 4 && args[1] == "--emit-plugin")
+    {
+        immutable outputBase = args[2];
+        immutable projectDir = args[3];
+        immutable entry = args.length > 4 ? args[4] : "main.d";
+        immutable source = readText(buildPath(projectDir, entry));
+        immutable emitWork = buildPath(tempDir(), "dcad-plugin-emit-"
+                                       ~ processId.to!string ~ "-"
+                                       ~ baseName(outputBase));
+        mkdirRecurse(emitWork);
+        auto emitHost = new ScriptHost(emitWork, root, projectDir);
+        auto emitted = emitHost.run(source);
+        if (!emitted.ok())
+        {
+            stderr.writeln("plugin emission failed: ", emitted.error);
+            return 1;
+        }
+        immutable loaded = emitHost.loadedPath();
+        if (!loaded.length || !exists(loaded))
+        {
+            stderr.writeln("plugin emission lost its loaded image");
+            return 1;
+        }
+        copy(loaded, outputBase ~ sharedLibraryExtension());
+        write(outputBase ~ ".key", emitHost.sourceCacheKey(source) ~ "\n");
+        writeln("PASS: emitted ", outputBase);
+        return 0;
+    }
+
     // Force the no-bundled-font fallback at a scaled size and run ImGui's
     // frame-2 checks; this used to assert at startup on Windows high-DPI.
     // Run from an empty directory so the shim cannot find the checkout's
@@ -39,10 +77,6 @@ int main()
         return 1;
     }
 
-    // Release CI points this at the extracted launcher payload, so the same
-    // script tests run against the private toolchain shipped to users.
-    immutable overrideRoot = environment.get("DCAD_SCRIPT_HOST_ROOT", "");
-    immutable root = overrideRoot.length ? overrideRoot : resourceRoot();
     immutable workDir = buildPath(tempDir(), "dcad-script-host-smoke-"
                                   ~ processId.to!string);
     mkdirRecurse(workDir);
@@ -58,6 +92,27 @@ int main()
     }
 
     auto host = new ScriptHost(workDir, root);
+
+    // Acceptance mode used after launcher extraction: prove startup can load
+    // the shipped plugin instead of invoking the bundled compiler again.
+    if (environment.get("DCAD_CHECK_PRECOMPILED", "") == "1")
+    {
+        auto shipped = host.runPrecompiled(
+            readText(buildPath(root, "samples", "coffee-table", "table.d")),
+            "dcad-coffee-table");
+        if (!shipped.ok())
+        {
+            stderr.writeln("precompiled coffee-table failed: ", shipped.error);
+            return 1;
+        }
+        immutable expected = "dcad-coffee-table" ~ sharedLibraryExtension();
+        if (baseName(host.loadedPath()) != expected)
+        {
+            stderr.writeln("startup recompiled instead of loading ", expected,
+                           ": ", host.loadedPath());
+            return 1;
+        }
+    }
 
     // Legacy body-style script: the source is injected into dcad_script_run.
     auto body = host.run("Shape result = Workplane.create().box(2, 2, 2).shape;");
