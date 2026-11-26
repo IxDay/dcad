@@ -18,7 +18,13 @@ project template and OCCT/GLFW libraries into a versioned cache under the user's
 data directory. The macOS `dcad.app` instead places the real GUI and the same
 resources in `Contents/`, because LaunchServices terminates an app that execs
 into an unsigned cache binary. The Windows launcher uses the GUI subsystem and
-suppresses the child console; Linux includes a `Terminal=false` desktop entry.
+suppresses the child console; it redirects the GUI's stdout/stderr to `gui.log`
+next to the extracted binary and reports startup failures in a message box.
+Linux includes a `Terminal=false` desktop entry.
+
+Hot reload compiles scripts with `ldc2`, so that compiler must be on `PATH`.
+If it is missing, the error is shown in the editor instead of terminating the
+GUI.
 
 The window opens the real tracked file `samples/coffee-table/table.d` and
 renders it in your VS Code **Base16 Default Light** palette (`#f8f8f8` editor, `#f9f9f9` sidebar,

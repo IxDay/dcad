@@ -15,10 +15,10 @@
 module launcher.main;
 
 import std.conv : to;
-import std.file : exists, copy, dirEntries, SpanMode, write;
+import std.file : exists, copy, dirEntries, readText, SpanMode, write;
 import std.path : baseName, buildPath;
-import std.stdio : stderr, writeln;
-import std.string : toStringz;
+import std.stdio : File, stderr, stdin, writeln;
+import std.string : splitLines, toStringz;
 
 version (Posix)
     import std.process : execv;
@@ -46,6 +46,16 @@ private void reportError(string text)
     }
     else
         stderr.writeln("dcad: ", text);
+}
+
+/// Keep the last lines of a child log small enough for a message box.
+private string logTail(string path, size_t maxLines = 12)
+{
+    import std.array : join;
+
+    auto lines = readText(path).splitLines;
+    if (lines.length > maxLines) lines = lines[$ - maxLines .. $];
+    return lines.join("\n");
 }
 
 /// `--print-root` is used by the acceptance suite. A GUI-subsystem binary has
@@ -130,16 +140,28 @@ private int launch(string[] args)
     version (Windows)
     {
         // CREATE_NO_WINDOW stops the console-subsystem inner GUI from opening
-        // a terminal behind the GUI-subsystem launcher. Wait so exit codes and
-        // the launcher lifetime match the GUI's.
+        // a terminal behind the GUI-subsystem launcher. The child still
+        // writes diagnostics to stderr, so redirect both streams to a log;
+        // with no console those writes would throw and exit with status 1.
+        immutable logPath = buildPath(state.root, "gui.log");
+        auto log = File(logPath, "w");
+        scope(exit) log.close();
+        log.writeln("dcad launcher: starting ", inner);
+        log.flush();
+
         string[] childArgs = [inner] ~ args[1 .. $];
         try
         {
-            immutable status = wait(spawnProcess(childArgs, null,
-                                                 Config.suppressConsole));
+            immutable status = wait(spawnProcess(
+                childArgs, stdin, log, log, null,
+                Config.suppressConsole | Config.retainStdout |
+                Config.retainStderr));
+            log.writeln("dcad launcher: child exit ", status);
+            log.flush();
             if (status != 0)
                 reportError("embedded GUI exited with status "
-                            ~ status.to!string);
+                            ~ status.to!string ~ "\nLog: " ~ logPath ~
+                            "\n" ~ logTail(logPath));
             return status;
         }
         catch (Exception e)

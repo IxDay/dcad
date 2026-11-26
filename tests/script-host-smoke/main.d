@@ -8,8 +8,10 @@ module script_host_smoke;
 
 import std.stdio : writeln, stderr;
 import std.algorithm : startsWith;
+import std.algorithm.searching : canFind;
 import std.file : exists, readText, mkdirRecurse, tempDir;
 import std.path : baseName, buildPath;
+import std.process : environment;
 import std.conv : to;
 import gui.agent : AgentMessage, AgentRole, agentCacheDir,
                    decodeAgentLine, makeSessionId;
@@ -150,6 +152,19 @@ int main()
     {
         stderr.writeln("agent session cache is not app-local: ", session,
                        " / ", agentCacheDir());
+        return 1;
+    }
+
+    // A missing compiler must become a visible script error, not an uncaught
+    // exception that makes the packaged GUI exit with status 1.
+    immutable savedPath = environment.get("PATH", "");
+    scope(exit) environment["PATH"] = savedPath;
+    environment["PATH"] = workDir;
+    auto noCompiler = host.run("Shape result = Workplane.create().box(1, 1, 1).shape;");
+    if (noCompiler.ok() || noCompiler.error.length == 0 ||
+        !noCompiler.error.canFind("ldc2"))
+    {
+        stderr.writeln("missing ldc2 was not reported: ", noCompiler.error);
         return 1;
     }
 

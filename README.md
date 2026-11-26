@@ -78,8 +78,10 @@ The macOS archive contains `dcad.app` with the real GUI and its resources inside
 signed ad hoc; first-time downloads may still need right-click > Open. The
 Windows launcher is built with the GUI subsystem and a WinMain entry point, and
 starts the embedded GUI with `CREATE_NO_WINDOW`, so no console window appears;
-fatal errors use a message box. The Linux archive includes a `Terminal=false`
-desktop entry for the same behaviour.
+its diagnostics go to `gui.log` in the extracted cache and fatal errors use a
+message box. The Linux archive includes a `Terminal=false` desktop entry for
+the same behaviour. Hot reload still needs `ldc2` on `PATH`; a missing compiler
+is reported in the editor rather than exiting the application.
 On Windows the
 CI downloads the official OCCT 7.9.3 `vc14-64` archive, its matching `3rdparty`
 archive (for `TKernel`'s jemalloc/TBB and the media/image dependencies reached

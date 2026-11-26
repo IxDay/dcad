@@ -410,7 +410,11 @@ void main(string[] args)
     {
         import std.string : fromStringz;
         auto src = fromStringz(dcad_textedit_get_text(editor)).idup;
-        auto result = host.run(src);
+        RunResult result;
+        try
+            result = host.run(src);
+        catch (Exception e)
+            result = RunResult(null, "script host failed: " ~ e.msg);
         if (result.ok())
         {
             currentShape = result.shape;
@@ -447,7 +451,6 @@ void main(string[] args)
             lastError = result.error;
             showError = true;
             status = "Script failed - see error below";
-            stderr.writeln("script error: ", result.error);
         }
     }
 

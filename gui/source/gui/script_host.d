@@ -435,7 +435,15 @@ public:
             cmd ~= modSrcPath;
         cmd ~= [srcPath, "-of=" ~ dylibPath];
 
-        auto compiled = execute(cmd);
+        import std.process : ProcessException;
+
+        typeof(execute(cmd)) compiled;
+        try
+            compiled = execute(cmd);
+        catch (ProcessException e)
+            return RunResult(null, "cannot start ldc2: " ~ e.msg);
+        catch (Exception e)
+            return RunResult(null, "script compiler failed: " ~ e.msg);
         if (compiled.status != 0)
         {
             string msg = compiled.output.length ? compiled.output : "ldc2 failed";
