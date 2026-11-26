@@ -466,6 +466,12 @@ public:
                 cmd ~= "-L/DEFAULTLIB:ucrtbase";
                 cmd ~= "-L/DEFAULTLIB:dcad-crt-legacy";
                 childEnv = environment.toAA();
+                // A developer machine may have Visual Studio's LIB/INCLUDE
+                // exported. They would pull a second, static CRT into the
+                // plugin and clash with the bundled import libraries.
+                childEnv.remove("LIB");
+                childEnv.remove("INCLUDE");
+                childEnv.remove("LIBPATH");
                 childEnv["PATH"] = toolBin ~ ";" ~
                                    childEnv.get("PATH", "");
             }
