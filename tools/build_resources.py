@@ -17,6 +17,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+from make_crt_lib import build as build_crt_lib
+
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / "build"
 PAYLOAD = BUILD / "dcad_payload.bin"
@@ -263,9 +265,10 @@ def windows_toolchain(stage):
     copy_tree(ldc_root / "etc" / "ldc2.conf", tool / "etc" / "ldc2.conf")
     copy_tree(ldc_root / "import", tool / "import", skip=("*.pdb",))
     copy_tree(ldc_root / "lib", tool / "lib", skip=("*.pdb",))
+    (tool / "lib" / "dcad-crt-legacy.lib").write_bytes(build_crt_lib())
 
     licenses = tool / "licenses"
-    for base in [ldc_root] + list(linker.parents)[:3]:
+    for base in [ldc_root] + list(linker.parents)[:8]:
         for name in ["LICENSE", "LICENSE.txt", "LICENSE.md", "COPYING"]:
             source = base / name
             if source.is_file():

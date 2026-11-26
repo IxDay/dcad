@@ -69,7 +69,12 @@ jobs:
           curl -fsSL -o /c/dcad/lld/rustc.tar.xz \
             https://static.rust-lang.org/dist/2026-11-12/rustc-1.100.0-x86_64-pc-windows-msvc.tar.xz
           tar -xJf /c/dcad/lld/rustc.tar.xz -C /c/dcad/lld
-          RUST_LLD=$(find /c/dcad/lld -name rust-lld.exe | head -1)
+          # Prefer the dedicated lld-link front-end; rust-lld is a multicall
+          # binary whose argv[0] must be exactly lld-link.exe to select it.
+          RUST_LLD=$(find /c/dcad/lld -path '*gcc-ld/lld-link.exe' | head -1)
+          if [ -z "$RUST_LLD" ]; then
+            RUST_LLD=$(find /c/dcad/lld -name rust-lld.exe | head -1)
+          fi
           test -n "$RUST_LLD"
           cp "$RUST_LLD" /c/dcad/lld/bin/lld-link.exe
           echo "DCAD_LLD_LINK=$(cygpath -w /c/dcad/lld/bin/lld-link.exe)" >> "$GITHUB_ENV"

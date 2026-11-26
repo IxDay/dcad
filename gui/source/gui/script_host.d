@@ -456,8 +456,15 @@ public:
                     return RunResult(null,
                         "bundled ldc2 is missing lld-link.exe");
                 cmd ~= "--linker=lld-link";
-                cmd ~= "-L/LIBPATH:" ~ buildPath(repoRoot, "toolchain", "lib",
-                                                 "mingw");
+                immutable toolLib = buildPath(repoRoot, "toolchain", "lib");
+                cmd ~= "-L/LIBPATH:" ~ toolLib;
+                cmd ~= "-L/LIBPATH:" ~ buildPath(toolLib, "mingw");
+                // Visual Studio normally supplies these through LIB. The
+                // staged LDC libs cover UCRT and vcruntime; the generated
+                // import library supplies the legacy names Phobos references
+                // (execv, fileno, open, tzset, ...) from ucrtbase.dll.
+                cmd ~= "-L/DEFAULTLIB:ucrtbase";
+                cmd ~= "-L/DEFAULTLIB:dcad-crt-legacy";
                 childEnv = environment.toAA();
                 childEnv["PATH"] = toolBin ~ ";" ~
                                    childEnv.get("PATH", "");

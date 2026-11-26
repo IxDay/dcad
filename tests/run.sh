@@ -65,6 +65,7 @@ if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
             test -x "$ROOT/toolchain/bin/ldc2.exe"
             test -x "$ROOT/toolchain/bin/lld-link.exe"
             test -f "$ROOT/toolchain/lib/phobos2-ldc.lib"
+            test -f "$ROOT/toolchain/lib/dcad-crt-legacy.lib"
             test -f "$ROOT/toolchain/lib/mingw/msvcrt.lib"
 
             # The same scripts now compile through the bundled compiler with
