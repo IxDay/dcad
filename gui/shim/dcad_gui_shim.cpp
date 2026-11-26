@@ -54,9 +54,24 @@ struct GLFWwindow;
 // assets beside the binary; source checkouts keep them under gui/assets.
 static std::string g_resourceRoot;
 
+// GLFW reports window sizes in screen points but ImGui works in framebuffer
+// pixels. On HiDPI displays the D host multiplies every fixed layout value by
+// this factor; the shim scales fonts, style metrics and icon buttons to match.
+static float g_uiScale = 1.0f;
+
 extern "C" void dcad_gui_set_resource_root(const char* root)
 {
     g_resourceRoot = root ? root : "";
+}
+
+extern "C" void dcad_gui_set_scale(float scale)
+{
+    g_uiScale = scale > 0.25f ? (scale < 4.0f ? scale : 4.0f) : 0.25f;
+}
+
+extern "C" float dcad_gui_scale(void)
+{
+    return g_uiScale;
 }
 
 static bool fileExists(const std::string& path)
@@ -111,13 +126,18 @@ static void loadGuiFont(ImGuiIO& io)
     for (const char* path : textCandidates)
     {
         if (!path || !*path) continue;
-        if (addFontFromAsset(io, path, 15.0f, textRange))
+        if (addFontFromAsset(io, path, 15.0f * g_uiScale, textRange))
         {
             haveTextFont = true;
             break;
         }
     }
-    if (!haveTextFont) io.Fonts->AddFontDefault();
+    if (!haveTextFont)
+    {
+        ImFontConfig config;
+        config.SizePixels = 15.0f * g_uiScale;
+        io.Fonts->AddFontDefault(&config);
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -282,6 +302,8 @@ extern "C" void dcad_gui_apply_light_theme(void)
     c[ImGuiCol_NavWindowingHighlight]  = broc(0x7cafc2, 0.6f);
     c[ImGuiCol_NavWindowingDimBg]      = broc(0x000000, 0.1f);
     c[ImGuiCol_ModalWindowDimBg]       = broc(0x000000, 0.25f);
+
+    if (g_uiScale != 1.0f) s.ScaleAllSizes(g_uiScale);
 }
 
 /* --------------------------------------------------------------------------
@@ -368,6 +390,8 @@ extern "C" void dcad_gui_apply_zed_theme(void)
     c[ImGuiCol_NavWindowingHighlight]  = broc(0x8b9bff, 0.7f);
     c[ImGuiCol_NavWindowingDimBg]      = broc(0x000000, 0.4f);
     c[ImGuiCol_ModalWindowDimBg]       = broc(0x000000, 0.5f);
+
+    if (g_uiScale != 1.0f) s.ScaleAllSizes(g_uiScale);
 }
 
 extern "C" void dcad_gui_shutdown(void)
@@ -451,7 +475,8 @@ extern "C" int dcad_gui_button(const char* label)
 {
     // Base16 Light button.foreground is #181818 on the blue button background.
     ImGui::PushStyleColor(ImGuiCol_Text, broc(0x181818));
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(8, 4));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2(8 * g_uiScale, 4 * g_uiScale));
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 2.0f);
     bool pressed = ImGui::Button(label);
     ImGui::PopStyleVar(2);
@@ -512,7 +537,8 @@ extern "C" int dcad_gui_icon_button(const char* id, void* texID, float size)
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, broc(0xd8d8d8));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive, broc(0x7cafc2, 0.45f));
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(2, 2));
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2(2 * g_uiScale, 2 * g_uiScale));
     bool pressed = ImGui::ImageButton(id, ImTextureRef(iconTexture(texID)),
                                       ImVec2(size, size));
     ImGui::PopStyleVar();

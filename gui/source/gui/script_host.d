@@ -18,7 +18,7 @@ module gui.script_host;
 
 import std.stdio : File;
 import std.file : write, remove, exists, dirEntries, SpanMode;
-import std.path : buildPath;
+import std.path : buildPath, dirName;
 import std.process : execute, environment;
 import std.regex : ctRegex, matchFirst, replaceFirst;
 import std.algorithm.sorting : sort;
@@ -310,6 +310,23 @@ private string asModule(string source, string modName)
     return replaceFirst(source, moduleDecl, "module " ~ modName ~ ";");
 }
 
+/**
+ * Compiler used for hot reload.
+ *
+ * Released Windows archives carry a private LDC toolchain in the cache root,
+ * so editing works on a machine with no system D compiler. Source checkouts
+ * continue to use whatever `ldc2` is on PATH.
+ */
+private string compilerExecutable(string repoRoot)
+{
+    version (Windows)
+    {
+        immutable bundled = buildPath(repoRoot, "toolchain", "bin", "ldc2.exe");
+        if (exists(bundled)) return bundled;
+    }
+    return "ldc2";
+}
+
 /// Result of a script run: either a shape or an error message.
 struct RunResult
 {
@@ -417,7 +434,9 @@ public:
                 remove(dylibPath);
         }
 
-        string[] cmd = ["ldc2", "-shared", "-relocation-model=pic"];
+        auto compiler = compilerExecutable(repoRoot);
+        string[] cmd = [compiler, "-shared", "-relocation-model=pic"];
+        string[string] childEnv;
         version (Windows)
         {
             // -shared normally implies -link-defaultlib-shared, which expects
@@ -425,6 +444,24 @@ public:
             // the core library unresolved. The host and shims use the static
             // MSVC CRT, so build plugins against the static D runtime too.
             cmd ~= "-link-defaultlib-shared=false";
+            if (compiler != "ldc2")
+            {
+                // The bundled compiler finds its config, imports and libraries
+                // relative to its own path. A portable lld-link stands in for
+                // Visual Studio's link.exe; point ldc2 at it explicitly and
+                // pass the import libraries shipped with the toolchain.
+                immutable toolBin = dirName(compiler);
+                immutable bundledLinker = buildPath(toolBin, "lld-link.exe");
+                if (!exists(bundledLinker))
+                    return RunResult(null,
+                        "bundled ldc2 is missing lld-link.exe");
+                cmd ~= "--linker=lld-link";
+                cmd ~= "-L/LIBPATH:" ~ buildPath(repoRoot, "toolchain", "lib",
+                                                 "mingw");
+                childEnv = environment.toAA();
+                childEnv["PATH"] = toolBin ~ ";" ~
+                                   childEnv.get("PATH", "");
+            }
         }
         cmd ~= ["-I", buildPath(repoRoot, "source")];
         foreach (p; importPaths)
@@ -439,7 +476,7 @@ public:
 
         typeof(execute(cmd)) compiled;
         try
-            compiled = execute(cmd);
+            compiled = execute(cmd, childEnv);
         catch (ProcessException e)
             return RunResult(null, "cannot start ldc2: " ~ e.msg);
         catch (Exception e)

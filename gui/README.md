@@ -22,9 +22,14 @@ suppresses the child console; it redirects the GUI's stdout/stderr to `gui.log`
 next to the extracted binary and reports startup failures in a message box.
 Linux includes a `Terminal=false` desktop entry.
 
-Hot reload compiles scripts with `ldc2`, so that compiler must be on `PATH`.
-If it is missing, the error is shown in the editor instead of terminating the
-GUI.
+The Windows release embeds a private LDC compiler, its D imports/libraries and a
+portable `lld-link`, so hot reload works with no compiler install and without
+Visual Studio. A source checkout uses the `ldc2` on `PATH`; if it is missing the
+error is shown in the editor instead of terminating the GUI.
+
+The interface follows the monitor's HiDPI scale: fonts, spacing, panes and icon
+sizes all multiply by the framebuffer/window ratio. Set `DCAD_UI_SCALE` (for
+example `DCAD_UI_SCALE=1.5`) to override the detected scale.
 
 The window opens the real tracked file `samples/coffee-table/table.d` and
 renders it in your VS Code **Base16 Default Light** palette (`#f8f8f8` editor, `#f9f9f9` sidebar,

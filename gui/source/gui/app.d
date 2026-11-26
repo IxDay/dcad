@@ -52,9 +52,20 @@ extern(C) void dcad_new_project_callback()
 
 // Startup opens a real, tracked script file. There is no hidden session file.
 private enum string defaultProjectDir = "samples/coffee-table";
-private enum float sidebarWidth = 220f;
-private enum float partsOverlayWidth = 170f;
-private enum float iconSize = 18f;
+// Layout values are authored at 100% and multiplied by the display scale.
+private enum float sidebarWidthBase = 220f;
+private enum float partsOverlayWidthBase = 170f;
+private enum float iconSizeBase = 18f;
+private float uiScale = 1f;
+private float sidebarWidth = sidebarWidthBase;
+private float partsOverlayWidth = partsOverlayWidthBase;
+private float iconSize = iconSizeBase;
+
+private float px(float value)
+{
+    return value * uiScale;
+}
+
 // Split the space left after the sidebar: 3/5 code editor, 2/5 preview.
 private enum float editorShare = 3.0f / 5.0f;
 
@@ -247,6 +258,33 @@ void main(string[] args)
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
+    // ImGui coordinates are framebuffer pixels; GLFW window sizes are screen
+    // points. On HiDPI displays the ratio is the OS scale factor. An explicit
+    // DCAD_UI_SCALE override is useful on mixed-DPI setups.
+    float requestedScale = 0f;
+    immutable scaleOverride = environment.get("DCAD_UI_SCALE", "");
+    if (scaleOverride.length)
+    {
+        try
+            requestedScale = scaleOverride.to!float;
+        catch (Exception)
+            requestedScale = 0f;
+    }
+    if (requestedScale <= 0f)
+    {
+        int framebufferW, framebufferH, windowWPoints, windowHPoints;
+        glfwGetFramebufferSize(window, &framebufferW, &framebufferH);
+        glfwGetWindowSize(window, &windowWPoints, &windowHPoints);
+        requestedScale = windowWPoints > 0 && framebufferW > 0
+            ? cast(float) framebufferW / windowWPoints : 1f;
+    }
+    uiScale = requestedScale < 0.5f ? 0.5f
+            : requestedScale > 4f ? 4f : requestedScale;
+    sidebarWidth = px(sidebarWidthBase);
+    partsOverlayWidth = px(partsOverlayWidthBase);
+    iconSize = px(iconSizeBase);
+    dcad_gui_set_scale(uiScale);
+
     void updateTitle()
     {
         auto label = "dcad - " ~ project.name ~ " - " ~ baseName(currentFile);
@@ -337,7 +375,7 @@ void main(string[] args)
             {
                 int open = ((key in folderOpen) !is null && folderOpen[key]) ? 1 : 0;
                 dcad_gui_icon_image(
-                    iconTexture(open != 0 ? iconFolderOpen : iconFolder), 16, 16);
+                    iconTexture(open != 0 ? iconFolderOpen : iconFolder), px(16), px(16));
                 dcad_gui_same_line();
                 if (dcad_gui_tree_node(e.name.toStringz, &open) != 0)
                 {
@@ -352,7 +390,7 @@ void main(string[] args)
             {
                 int selected = key == currentFile ? 1 : 0;
                 auto fi = fileIcon(e.name);
-                dcad_gui_icon_image(iconTexture(fi.texture), 16, 16);
+                dcad_gui_icon_image(iconTexture(fi.texture), px(16), px(16));
                 dcad_gui_same_line();
                 if (dcad_gui_selectable(e.name.toStringz, selected) != 0)
                 {
@@ -537,9 +575,9 @@ void main(string[] args)
             dcad_gui_get_window_size(&sw, &sh);
             float cx, cy;
             dcad_gui_get_cursor_screen_pos(&cx, &cy);
-            immutable treeH = (sy + sh - 8f) - cy;
+            immutable treeH = (sy + sh - px(8)) - cy;
             if (dcad_gui_begin_child("##tree", 0,
-                                     treeH > 40 ? treeH : 40,
+                                     treeH > px(40) ? treeH : px(40),
                                      childFlagsNone))
                 drawFileTree(projectRoot, "");
             dcad_gui_end_child();
@@ -609,10 +647,10 @@ void main(string[] args)
                 // long files.
                 float cursorX, cursorY;
                 dcad_gui_get_cursor_screen_pos(&cursorX, &cursorY);
-                immutable bottomReserve = showError ? 168f : 64f;
-                immutable available = (wy + wh - 8f) - cursorY - bottomReserve;
-                immutable editorH = available > 80 ? available : 80;
-                dcad_textedit_render(editor, "##script", ww - 24, editorH);
+                immutable bottomReserve = showError ? px(168) : px(64);
+                immutable available = (wy + wh - px(8)) - cursorY - bottomReserve;
+                immutable editorH = available > px(80) ? available : px(80);
+                dcad_textedit_render(editor, "##script", ww - px(24), editorH);
 
                 dcad_gui_text_colored(status.toStringz, 0.63f, 0.71f, 0.42f, 1);
 
@@ -622,9 +660,9 @@ void main(string[] args)
                                           0.67f, 0.27f, 0.26f, 1);
                     float errX, errY;
                     dcad_gui_get_cursor_screen_pos(&errX, &errY);
-                    immutable errRoom = (wy + wh - 8f) - errY;
+                    immutable errRoom = (wy + wh - px(8)) - errY;
                     if (dcad_gui_begin_child("##error", 0,
-                                             errRoom > 60 ? errRoom : 60,
+                                             errRoom > px(60) ? errRoom : px(60),
                                              childFlagsBorders))
                         dcad_gui_text_wrapped(lastError.toStringz);
                     dcad_gui_end_child();
@@ -644,10 +682,10 @@ void main(string[] args)
 
                 float cursorX, cursorY;
                 dcad_gui_get_cursor_screen_pos(&cursorX, &cursorY);
-                immutable logReserve = 140f;
-                immutable logRoom = (wy + wh - 8f) - cursorY - logReserve;
+                immutable logReserve = px(140);
+                immutable logRoom = (wy + wh - px(8)) - cursorY - logReserve;
                 if (dcad_gui_begin_child("##agent-log", 0,
-                                         logRoom > 80 ? logRoom : 80,
+                                         logRoom > px(80) ? logRoom : px(80),
                                          childFlagsBorders))
                 {
                     foreach (msg; agent.messages)
@@ -690,7 +728,7 @@ void main(string[] args)
 
                 dcad_gui_spacing();
                 dcad_gui_input_text_multiline("##agent-prompt", agentPrompt.ptr,
-                    cast(int) agentPrompt.length, ww - 24, 64,
+                    cast(int) agentPrompt.length, ww - px(24), px(64),
                     inputTextFlagsCtrlEnterForNewLine |
                     inputTextFlagsNoHorizontalScroll |
                     inputTextFlagsWordWrap);
@@ -769,7 +807,7 @@ void main(string[] args)
                                  viewport.orthographicEnabled()))
                 viewport.setOrthographic(!viewport.orthographicEnabled());
             dcad_gui_same_line();
-            dcad_gui_set_next_item_width(110);
+            dcad_gui_set_next_item_width(px(110));
             if (dcad_gui_slider_float("Deflection", &deflection, 0.05f, 5.0f) != 0 &&
                 currentShape !is null)
             {
@@ -803,11 +841,11 @@ void main(string[] args)
                     animPlaying = true;
                 }
                 dcad_gui_same_line();
-                dcad_gui_set_next_item_width(50);
+                dcad_gui_set_next_item_width(px(50));
                 if (dcad_gui_input_float("FPS", &animFps, 1) != 0 && animFps < 1)
                     animFps = 1;
                 dcad_gui_same_line();
-                dcad_gui_set_next_item_width(55);
+                dcad_gui_set_next_item_width(px(55));
                 if (dcad_gui_input_int("Steps", &animSteps, 1) != 0 &&
                     animSteps < 1)
                     animSteps = 1;
@@ -816,7 +854,7 @@ void main(string[] args)
                 // grows with time (no moving cursor); click/drag to scrub.
                 immutable cycle = cycleSeconds();
                 dcad_gui_progress_bar(cast(float)(animTime / cycle),
-                    dcad_gui_content_region_avail_x(), 20f,
+                    dcad_gui_content_region_avail_x(), px(20),
                     format("  %.2f / %.2f s  ", animTime, cycle).toStringz);
                 float barX0, barY0, barX1, barY1;
                 dcad_gui_get_item_rect(&barX0, &barY0, &barX1, &barY1);
@@ -834,17 +872,18 @@ void main(string[] args)
             // The canvas takes exactly the space left in the pane.
             float cursorX, cursorY;
             dcad_gui_get_cursor_screen_pos(&cursorX, &cursorY);
-            immutable imgW = w - 16 > 16 ? w - 16 : 16;
-            immutable remaining = (y + h - 8f) - cursorY;
-            immutable imgH = remaining > 80 ? remaining : 80;
+            immutable imgW = w - px(16) > px(16) ? w - px(16) : px(16);
+            immutable remaining = (y + h - px(8)) - cursorY;
+            immutable imgH = remaining > px(80) ? remaining : px(80);
 
             // The parts overlay and the timeline own their mouse area; don't
             // let a click there also orbit the camera.
             if (hasAnimation)
             {
-                immutable rowH = 19f;
-                immutable startX = cursorX + imgW - partsOverlayWidth - 6f - 3f;
-                immutable startY = cursorY + 6f - 2f;
+                immutable rowH = px(19);
+                immutable startX = cursorX + imgW - partsOverlayWidth
+                                   - px(6) - px(3);
+                immutable startY = cursorY + px(6) - px(2);
                 float mx, my;
                 dcad_gui_get_mouse_pos(&mx, &my);
                 if (mx >= startX && mx <= startX + partsOverlayWidth &&
@@ -894,9 +933,9 @@ void main(string[] args)
             // border or background. Hovering a row highlights that part.
             if (hasAnimation)
             {
-                immutable rowH = 19f;
-                immutable startX = cursorX + imgW - partsOverlayWidth - 6f;
-                immutable startY = cursorY + 6f;
+                immutable rowH = px(19);
+                immutable startX = cursorX + imgW - partsOverlayWidth - px(6);
+                immutable startY = cursorY + px(6);
                 foreach (i; 0 .. host.animPartCount())
                 {
                     auto name = host.animPartName(cast(int) i);
@@ -905,11 +944,12 @@ void main(string[] args)
                     immutable rowY = startY + cast(float) i * rowH;
 
                     dcad_gui_set_cursor_screen_pos(startX, rowY);
-                    dcad_gui_icon_image(iconTexture(iconCube), 14, 14);
-                    dcad_gui_set_cursor_screen_pos(startX + 18f, rowY);
+                    dcad_gui_icon_image(iconTexture(iconCube), px(14), px(14));
+                    dcad_gui_set_cursor_screen_pos(startX + px(18), rowY);
                     dcad_gui_text(name.toStringz);
 
-                    dcad_gui_set_cursor_screen_pos(startX - 3f, rowY - 2f);
+                    dcad_gui_set_cursor_screen_pos(startX - px(3),
+                                                   rowY - px(2));
                     auto ident = host.animPartId(cast(int) i);
                     auto rel = partSourceFile(ident, projectRoot);
                     if (rel is null) rel = partSourceFile(name, projectRoot);

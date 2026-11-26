@@ -46,13 +46,14 @@ def add_file(zf, path, name):
         zf.write(path, name)
 
 
-def copy_tree(source, target):
+def copy_tree(source, target, skip=()):
     if not source.exists():
         return
     if target.exists():
         shutil.rmtree(target)
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(source, target, symlinks=True)
+    shutil.copytree(source, target, symlinks=True,
+                    ignore=shutil.ignore_patterns(*skip))
 
 
 def copy_file(source, target):
@@ -220,6 +221,58 @@ def windows_libraries(stage):
     return any(lib.glob("*.dll"))
 
 
+def windows_toolchain(stage):
+    """Bundle a private LDC so hot reload works without a host compiler.
+
+    CI downloads the official LDC Windows package and a portable lld-link
+    (from Rust's redistributable rust-lld). Only the files ldc2 needs to compile
+    a plugin are kept: the compiler, its import libraries and D sources, and a
+    COFF linker. A user's PATH and Visual Studio install are not involved.
+    """
+    roots = []
+    env_root = os.environ.get("DCAD_LDC_ROOT")
+    if env_root:
+        roots.append(Path(env_root))
+    roots += sorted(Path("C:/dcad").glob("ldc2-*"), reverse=True)
+    installed = shutil.which("ldc2")
+    if installed:
+        roots.append(Path(installed).resolve().parent.parent)
+
+    ldc_root = next((p for p in roots if (p / "bin" / "ldc2.exe").is_file()),
+                    None)
+    if ldc_root is None:
+        return False
+
+    linker = Path(os.environ.get("DCAD_LLD_LINK", ""))
+    if not linker.is_file():
+        installed_lld = shutil.which("lld-link")
+        if installed_lld:
+            linker = Path(installed_lld)
+    if not linker.is_file():
+        fallback = Path("C:/dcad/lld/bin/lld-link.exe")
+        if fallback.is_file():
+            linker = fallback
+    if not linker.is_file():
+        return False
+
+    tool = stage / "toolchain"
+    copy_file(ldc_root / "bin" / "ldc2.exe", tool / "bin" / "ldc2.exe")
+    copy_file(linker, tool / "bin" / "lld-link.exe")
+    for dll in sorted((ldc_root / "bin").glob("*.dll")):
+        copy_file(dll, tool / "bin" / dll.name)
+    copy_tree(ldc_root / "etc" / "ldc2.conf", tool / "etc" / "ldc2.conf")
+    copy_tree(ldc_root / "import", tool / "import", skip=("*.pdb",))
+    copy_tree(ldc_root / "lib", tool / "lib", skip=("*.pdb",))
+
+    licenses = tool / "licenses"
+    for base in [ldc_root] + list(linker.parents)[:3]:
+        for name in ["LICENSE", "LICENSE.txt", "LICENSE.md", "COPYING"]:
+            source = base / name
+            if source.is_file():
+                copy_file(source, licenses / (base.name + "-" + name))
+    return (tool / "bin" / "ldc2.exe").is_file()
+
+
 def main():
     BUILD.mkdir(parents=True, exist_ok=True)
     embedded = os.environ.get("DCAD_EMBED_RESOURCES") == "1"
@@ -229,6 +282,7 @@ def main():
     stage.mkdir(parents=True)
 
     has_libs = False
+    has_compiler = False
     with zipfile.ZipFile(PAYLOAD, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
         if embedded:
             # The shim resolves icons/fonts as <root>/assets/..., while the
@@ -253,6 +307,8 @@ def main():
             print("  STAGE platform libraries", flush=True)
             if WINDOWS:
                 has_libs = windows_libraries(stage)
+                print("  STAGE private D toolchain", flush=True)
+                has_compiler = windows_toolchain(stage)
             elif MACOS and os.environ.get("DCAD_EMBED_SYSTEM_LIBS") != "0":
                 has_libs = macos_libraries(stage)
             elif os.environ.get("DCAD_EMBED_SYSTEM_LIBS") != "0":
@@ -266,7 +322,8 @@ def main():
                 if path.is_file():
                     zf.write(path, path.relative_to(stage).as_posix())
             zf.writestr("embedded.manifest",
-                        "dcad=1\nlibs=" + ("1" if has_libs else "0") + "\n")
+                        "dcad=1\nlibs=" + ("1" if has_libs else "0") +
+                        "\ncompiler=" + ("1" if has_compiler else "0") + "\n")
         else:
             zf.writestr("embedded.manifest", "dcad=0\nlibs=0\n")
 
@@ -302,7 +359,8 @@ def main():
                        cwd=BUILD, check=True)
 
     print("  ZIP ", PAYLOAD.relative_to(ROOT),
-          f"({PAYLOAD.stat().st_size} bytes, libs={has_libs})", flush=True)
+          f"({PAYLOAD.stat().st_size} bytes, libs={has_libs}, "
+          f"compiler={has_compiler})", flush=True)
 
 
 if __name__ == "__main__":

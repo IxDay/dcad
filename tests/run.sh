@@ -60,6 +60,22 @@ if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
     test -f "$ROOT/samples/coffee-table/table.d"
     test -d "$ROOT/samples/coffee-table"
     test -d "$ROOT/source"
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            test -x "$ROOT/toolchain/bin/ldc2.exe"
+            test -x "$ROOT/toolchain/bin/lld-link.exe"
+            test -f "$ROOT/toolchain/lib/phobos2-ldc.lib"
+            test -f "$ROOT/toolchain/lib/mingw/msvcrt.lib"
+
+            # The same scripts now compile through the bundled compiler with
+            # no Visual Studio LIB/INCLUDE environment. PATH is left intact so
+            # OCCT's DLLs remain findable.
+            (
+                unset LIB INCLUDE
+                DCAD_SCRIPT_HOST_ROOT="$ROOT" ./dcad-script-host-smoke.exe
+            )
+            ;;
+    esac
 
     # Start the embedded GUI once without creating a window. This catches a
     # launcher that cannot spawn its child even when --print-root succeeds.

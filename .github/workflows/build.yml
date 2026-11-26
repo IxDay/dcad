@@ -56,6 +56,23 @@ jobs:
           7z x /tmp/ldc.7z -o/c/dcad/ldc -y >/dev/null
           LDC_ROOT=$(find /c/dcad/ldc -maxdepth 1 -type d -name 'ldc2-*' | head -1)
           echo "$(cygpath -w "$LDC_ROOT/bin")" >> "$GITHUB_PATH"
+          echo "DCAD_LDC_ROOT=$(cygpath -w "$LDC_ROOT")" >> "$GITHUB_ENV"
+
+      # LDC's MSVC target needs a COFF linker. A portable lld-link is enough,
+      # so released users do not need Visual Studio just to run a script. It is
+      # redistributed under the LLVM exceptions from Rust's rust-lld component.
+      - name: Stage portable linker (Windows x86-64)
+        if: runner.os == 'Windows'
+        run: |
+          set -eu
+          mkdir -p /c/dcad/lld/bin
+          curl -fsSL -o /c/dcad/lld/rustc.tar.xz \
+            https://static.rust-lang.org/dist/2026-11-12/rustc-1.100.0-x86_64-pc-windows-msvc.tar.xz
+          tar -xJf /c/dcad/lld/rustc.tar.xz -C /c/dcad/lld
+          RUST_LLD=$(find /c/dcad/lld -name rust-lld.exe | head -1)
+          test -n "$RUST_LLD"
+          cp "$RUST_LLD" /c/dcad/lld/bin/lld-link.exe
+          echo "DCAD_LLD_LINK=$(cygpath -w /c/dcad/lld/bin/lld-link.exe)" >> "$GITHUB_ENV"
 
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'

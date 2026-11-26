@@ -21,7 +21,10 @@ import gui.script_host : ScriptHost;
 
 int main()
 {
-    immutable root = resourceRoot();
+    // Release CI points this at the extracted launcher payload, so the same
+    // script tests run against the private toolchain shipped to users.
+    immutable overrideRoot = environment.get("DCAD_SCRIPT_HOST_ROOT", "");
+    immutable root = overrideRoot.length ? overrideRoot : resourceRoot();
     immutable workDir = buildPath(tempDir(), "dcad-script-host-smoke-"
                                   ~ processId.to!string);
     mkdirRecurse(workDir);
@@ -160,7 +163,11 @@ int main()
     immutable savedPath = environment.get("PATH", "");
     scope(exit) environment["PATH"] = savedPath;
     environment["PATH"] = workDir;
-    auto noCompiler = host.run("Shape result = Workplane.create().box(1, 1, 1).shape;");
+    immutable bareWorkDir = buildPath(workDir, "no-compiler");
+    mkdirRecurse(bareWorkDir);
+    auto bareHost = new ScriptHost(bareWorkDir, workDir);
+    auto noCompiler = bareHost.run(
+        "Shape result = Workplane.create().box(1, 1, 1).shape;");
     if (noCompiler.ok() || noCompiler.error.length == 0 ||
         !noCompiler.error.canFind("ldc2"))
     {

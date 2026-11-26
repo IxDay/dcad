@@ -23,6 +23,21 @@ def main():
             libs = [name for name in names if name.startswith("lib/")]
             if not libs:
                 raise SystemExit("manifest reports embedded libs but none are stored")
+        if sys.platform == "win32":
+            if "compiler=1\n" not in manifest:
+                raise SystemExit("Windows payload has no private D toolchain")
+            required = [
+                "toolchain/bin/ldc2.exe",
+                "toolchain/bin/lld-link.exe",
+                "toolchain/etc/ldc2.conf/30-compiler.conf",
+                "toolchain/import/object.d",
+                "toolchain/lib/druntime-ldc.lib",
+                "toolchain/lib/phobos2-ldc.lib",
+                "toolchain/lib/mingw/msvcrt.lib",
+            ]
+            missing = [name for name in required if name not in names]
+            if missing:
+                raise SystemExit("missing toolchain file: " + missing[0])
     print("PASS: launcher payload layout")
 
 
