@@ -34,6 +34,15 @@ enum int condFirstUseEver = 1 << 2;
 enum int childFlagsNone = 0;
 enum int childFlagsBorders = 1 << 0;
 
+// The two editor tabs are fixed: no reordering, dragging or close buttons.
+enum int tabBarFlagsNone = 0;
+enum int tabItemFlagsNoReorder = 1 << 5;
+
+// Chat input: Enter sends, Cmd/Ctrl+Enter inserts a newline, long prompts wrap.
+enum int inputTextFlagsCtrlEnterForNewLine = 1 << 8;
+enum int inputTextFlagsNoHorizontalScroll = 1 << 15;
+enum int inputTextFlagsWordWrap = 1 << 24;
+
 // ImGuiKey values (1.93): named keys start at 512.
 enum int keyEnter = 525;
 enum int keyF5 = 568;
@@ -110,6 +119,11 @@ extern(C) nothrow @nogc
     int  dcad_gui_is_item_hovered();
     int  dcad_gui_begin_child(const(char)* id, float w, float h, int flags);
     void dcad_gui_end_child();
+    int  dcad_gui_begin_tab_bar(const(char)* id, int flags);
+    void dcad_gui_end_tab_bar();
+    int  dcad_gui_begin_tab_item(const(char)* label, int flags);
+    void dcad_gui_end_tab_item();
+    void dcad_gui_set_scroll_here_y(float alignment);
 
     // Native menu bar: AppKit on macOS, Win32 on Windows, X11 on Linux.
     // GLFW has no menu API, so each platform supplies its own bridge.
@@ -125,6 +139,8 @@ extern(C) nothrow @nogc
     int  dcad_gui_checkbox(const(char)* label, int* v);
     int  dcad_gui_input_float(const(char)* label, float* v, float step);
     int  dcad_gui_input_int(const(char)* label, int* v, int step);
+    int  dcad_gui_input_text_multiline(const(char)* label, char* buf,
+                                       int bufSize, float w, float h, int flags);
     void dcad_gui_set_next_item_width(float w);
 
     // input

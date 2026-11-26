@@ -46,11 +46,24 @@ When an animated script is loaded, its parts are listed as a transparent overlay
 in the top-right of the preview: hovering a part highlights it in the render, and
 clicking it opens the source module that builds that part.
 
+The code pane has two fixed tabs. **Code** is the D editor described above.
+**Agent** is an in-UI OpenCode client: it runs the installed `opencode` CLI in the
+open project directory with its own credentials and full tool access, attaches
+the active `.d` file, and streams text, tool calls and errors into the tab. Enter
+or **Send** submits a prompt; Cmd/Ctrl+Enter inserts a newline. Session IDs and
+transcripts are stored only in dcad's app cache (`~/Library/Caches/dcad/agent` on
+macOS, `~/.cache/dcad/agent` on Linux, `%LOCALAPPDATA%\dcad\agent` on Windows),
+one per project root, so no hidden files are added to the project. dcad runs a
+standalone OpenCode server with `OPENCODE_DB` pointing into that same cache;
+your existing OpenCode config and credentials are unchanged.
+
 ## Controls
 
 | Action | Input |
 |---|---|
-| Run script | Cmd/Ctrl+Enter, or the Run icon |
+| Code / Agent tabs | Click the fixed tabs at the top of the editor pane |
+| Run script | Cmd/Ctrl+Enter, or the Run icon (Code tab) |
+| Send agent prompt | Enter in the Agent prompt, or Send; Cmd/Ctrl+Enter adds a newline |
 | Orbit | Left-drag in the viewport |
 | Pan | Middle/Right-drag in the viewport |
 | Zoom | Scroll over the viewport |

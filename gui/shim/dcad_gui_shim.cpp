@@ -554,6 +554,23 @@ extern "C" int dcad_gui_begin_child(const char* id, float w, float h, int flags)
 }
 extern "C" void dcad_gui_end_child(void) { ImGui::EndChild(); }
 
+extern "C" int dcad_gui_begin_tab_bar(const char* id, int flags)
+{
+    return ImGui::BeginTabBar(id, static_cast<ImGuiTabBarFlags>(flags)) ? 1 : 0;
+}
+extern "C" void dcad_gui_end_tab_bar(void) { ImGui::EndTabBar(); }
+extern "C" int dcad_gui_begin_tab_item(const char* label, int flags)
+{
+    // No p_open: tabs are fixed Code/Agent views and cannot be closed.
+    return ImGui::BeginTabItem(label, nullptr,
+                               static_cast<ImGuiTabItemFlags>(flags)) ? 1 : 0;
+}
+extern "C" void dcad_gui_end_tab_item(void) { ImGui::EndTabItem(); }
+extern "C" void dcad_gui_set_scroll_here_y(float alignment)
+{
+    ImGui::SetScrollHereY(alignment);
+}
+
 extern "C" int dcad_gui_tree_node(const char* label, int* open)
 {
     ImGui::SetNextItemOpen(*open != 0, ImGuiCond_Always);
@@ -587,6 +604,14 @@ extern "C" int dcad_gui_input_float(const char* label, float* v, float step)
 extern "C" int dcad_gui_input_int(const char* label, int* v, int step)
 {
     return ImGui::InputInt(label, v, step) ? 1 : 0;
+}
+extern "C" int dcad_gui_input_text_multiline(const char* label, char* buf,
+                                             int bufSize, float w, float h,
+                                             int flags)
+{
+    return ImGui::InputTextMultiline(label, buf, static_cast<size_t>(bufSize),
+                                     ImVec2(w, h),
+                                     static_cast<ImGuiInputTextFlags>(flags)) ? 1 : 0;
 }
 extern "C" void dcad_gui_set_next_item_width(float w) { ImGui::SetNextItemWidth(w); }
 

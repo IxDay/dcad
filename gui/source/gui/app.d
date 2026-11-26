@@ -1,7 +1,8 @@
 /**
- * dcad-gui -- two-pane editor + live 3D preview.
+ * dcad-gui -- project tree, Code/Agent editor + live 3D preview.
  *
- * Left pane: ImGuiColorTextEdit holding a D script.
+ * Left pane: project tree.
+ * Middle pane: fixed Code (ImGuiColorTextEdit) / Agent (OpenCode) tabs.
  * Right pane: OpenGL framebuffer texture showing the resulting OCCT shape.
  * Run with Ctrl+Enter (Cmd+Enter on macOS) or the Run button.
  */
@@ -15,6 +16,7 @@ import std.algorithm.sorting : sort;
 import std.array : array;
 import std.conv : to;
 
+import gui.agent : AgentBridge, AgentRole;
 import gui.platform : processId, nativeHandles, resourceRoot;
 import gui.project : Project, chooseProjectParent, fallbackProjectParent,
                      uniqueProjectPath;
@@ -189,6 +191,16 @@ void main(string[] args)
     string projectRoot = project.root;
     string currentFile = project.entry;
 
+    // Agent sessions live in the app cache, one per project root. The CLI runs
+    // with projectRoot as its cwd, so tools and credentials are the user's own.
+    auto agent = new AgentBridge();
+    agent.open(projectRoot, project.name);
+    scope(exit)
+    {
+        agent.close();
+        agent.persist();
+    }
+
     // --- GLFW / OpenGL ----------------------------------------------------
     if (glfwInit() != GLFW_TRUE)
     {
@@ -271,6 +283,15 @@ void main(string[] args)
     bool showError;
     float deflection = 1.0f;
     Shape currentShape;
+
+    // Editor pane tabs. The prompt buffer is fixed so ImGui never reallocates
+    // it while the UI owns the text; it is cleared after a successful send.
+    enum size_t agentPromptCapacity = 8192;
+    char[agentPromptCapacity] agentPrompt;
+    agentPrompt[] = '\0';
+    int currentTab;
+    ulong agentRevision = agent.revision;
+    bool suppressRun;
 
     // Project tree state.
     bool[string] folderOpen = [
@@ -442,6 +463,9 @@ void main(string[] args)
             project = created;
             projectRoot = created.root;
             currentFile = created.entry;
+            agent.open(created.root, created.name);
+            agentPrompt[] = '\0';
+            agentRevision = agent.revision;
             dcad_textedit_set_text(editor,
                                    readText(created.entryPath()).toStringz);
             updateTitle();
@@ -463,6 +487,9 @@ void main(string[] args)
         // GLFW polls; other platforms make this a no-op.
         dcad_native_menu_poll();
         glfwPollEvents();
+        // CLI output is collected on a reader thread; move it to GUI-owned
+        // state before any widget reads the transcript.
+        agent.drain();
         dcad_gui_new_frame();
 
         // Fixed layout rebuilt every frame: project tree / editor / preview.
@@ -478,8 +505,11 @@ void main(string[] args)
         int hoveredPart = -1;
         bool uiCaptured;
 
-        // Run trigger: global key chord, or the editor's Run button.
+        // Run trigger: global key chord, or the editor's Run button. This is
+        // recomputed per frame; the Agent tab clears it before it can reach
+        // the script host.
         bool doRun = dcad_gui_key_chord_pressed(modCtrl | keyEnter) != 0;
+        suppressRun = false;
 
         // ---------------- Project sidebar (always visible) ----------------
         dcad_gui_set_next_window_pos(0, 0, condAlways);
@@ -512,57 +542,172 @@ void main(string[] args)
         dcad_gui_set_next_window_size(editorW, vh, condAlways);
         if (dcad_gui_begin("Script", fixedPaneFlags))
         {
-            // Action row at the top of this pane; no menu-bar header.
-            if (iconButton(iconPlay, "Run script (Cmd/Ctrl+Enter)") || doRun)
-                doRun = true;
-            dcad_gui_same_line();
-            if (iconButton(iconSave, "Save script"))
+            // Two fixed views share this pane. Neither tab can be dragged,
+            // reordered or closed, so the pane split itself stays fixed.
+            int activeTab = currentTab;
+            if (dcad_gui_begin_tab_bar("##code-tabs", tabBarFlagsNone))
             {
-                import std.string : fromStringz;
-                if (!currentFile.length)
-                    currentFile = project.entry;
-                immutable target = buildPath(projectRoot, currentFile);
-                write(target, fromStringz(dcad_textedit_get_text(editor)).idup);
-                status = "Saved " ~ target;
-                updateTitle();
+                if (dcad_gui_begin_tab_item("Code", tabItemFlagsNoReorder))
+                {
+                    activeTab = 0;
+                    dcad_gui_end_tab_item();
+                }
+                if (dcad_gui_begin_tab_item("Agent", tabItemFlagsNoReorder))
+                {
+                    activeTab = 1;
+                    dcad_gui_end_tab_item();
+                }
+                dcad_gui_end_tab_bar();
             }
-            dcad_gui_same_line();
-            dcad_gui_align_text_to_frame_padding();
-            dcad_gui_text_colored(displayName.toStringz,
-                                  0.35f, 0.35f, 0.35f, 1);
+            currentTab = activeTab;
             dcad_gui_separator();
 
-            // Editor takes whatever is left after the status / error strip, so
-            // the pane fits vertically. Scrolling stays enabled for long files.
             float wx, wy, ww, wh;
             dcad_gui_get_window_pos(&wx, &wy);
             dcad_gui_get_window_size(&ww, &wh);
-            float cursorX, cursorY;
-            dcad_gui_get_cursor_screen_pos(&cursorX, &cursorY);
-            immutable bottomReserve = showError ? 168f : 64f;
-            immutable available = (wy + wh - 8f) - cursorY - bottomReserve;
-            immutable editorH = available > 80 ? available : 80;
-            dcad_textedit_render(editor, "##script", ww - 24, editorH);
 
-            dcad_gui_text_colored(status.toStringz, 0.63f, 0.71f, 0.42f, 1);
-
-            if (showError && lastError.length)
+            if (activeTab == 0)
             {
-                dcad_gui_text_colored("ERROR:".toStringz, 0.67f, 0.27f, 0.26f, 1);
-                float errX, errY;
-                dcad_gui_get_cursor_screen_pos(&errX, &errY);
-                immutable errRoom = (wy + wh - 8f) - errY;
-                if (dcad_gui_begin_child("##error", 0,
-                                         errRoom > 60 ? errRoom : 60,
+                // Action row at the top of this pane; no menu-bar header.
+                if (iconButton(iconPlay, "Run script (Cmd/Ctrl+Enter)") || doRun)
+                    doRun = true;
+                dcad_gui_same_line();
+                if (iconButton(iconSave, "Save script"))
+                {
+                    import std.string : fromStringz;
+                    if (!currentFile.length)
+                        currentFile = project.entry;
+                    immutable target = buildPath(projectRoot, currentFile);
+                    write(target, fromStringz(dcad_textedit_get_text(editor)).idup);
+                    status = "Saved " ~ target;
+                    updateTitle();
+                }
+                dcad_gui_same_line();
+                dcad_gui_align_text_to_frame_padding();
+                dcad_gui_text_colored(displayName.toStringz,
+                                      0.35f, 0.35f, 0.35f, 1);
+                dcad_gui_separator();
+
+                // Editor takes whatever is left after the status / error strip,
+                // so the pane fits vertically. Scrolling stays enabled for
+                // long files.
+                float cursorX, cursorY;
+                dcad_gui_get_cursor_screen_pos(&cursorX, &cursorY);
+                immutable bottomReserve = showError ? 168f : 64f;
+                immutable available = (wy + wh - 8f) - cursorY - bottomReserve;
+                immutable editorH = available > 80 ? available : 80;
+                dcad_textedit_render(editor, "##script", ww - 24, editorH);
+
+                dcad_gui_text_colored(status.toStringz, 0.63f, 0.71f, 0.42f, 1);
+
+                if (showError && lastError.length)
+                {
+                    dcad_gui_text_colored("ERROR:".toStringz,
+                                          0.67f, 0.27f, 0.26f, 1);
+                    float errX, errY;
+                    dcad_gui_get_cursor_screen_pos(&errX, &errY);
+                    immutable errRoom = (wy + wh - 8f) - errY;
+                    if (dcad_gui_begin_child("##error", 0,
+                                             errRoom > 60 ? errRoom : 60,
+                                             childFlagsBorders))
+                        dcad_gui_text_wrapped(lastError.toStringz);
+                    dcad_gui_end_child();
+                }
+            }
+            else
+            {
+                // Cmd/Ctrl+Enter belongs to the chat input here; script Run
+                // stays on the Code tab.
+                suppressRun = true;
+                auto sessionLabel = agent.sessionId.length
+                    ? "opencode session " ~ agent.sessionId
+                    : "opencode session (new)";
+                dcad_gui_text_colored(sessionLabel.toStringz,
+                                      0.35f, 0.35f, 0.35f, 1);
+                dcad_gui_separator();
+
+                float cursorX, cursorY;
+                dcad_gui_get_cursor_screen_pos(&cursorX, &cursorY);
+                immutable logReserve = 140f;
+                immutable logRoom = (wy + wh - 8f) - cursorY - logReserve;
+                if (dcad_gui_begin_child("##agent-log", 0,
+                                         logRoom > 80 ? logRoom : 80,
                                          childFlagsBorders))
-                    dcad_gui_text_wrapped(lastError.toStringz);
+                {
+                    foreach (msg; agent.messages)
+                    {
+                        string prefix;
+                        float r, g, b;
+                        final switch (msg.role)
+                        {
+                            case AgentRole.user:
+                                prefix = "You: ";
+                                r = 0.49f; g = 0.69f; b = 0.76f;
+                                break;
+                            case AgentRole.assistant:
+                                prefix = "Agent: ";
+                                r = 0.22f; g = 0.22f; b = 0.22f;
+                                break;
+                            case AgentRole.tool:
+                                prefix = "Tool: ";
+                                r = 0.40f; g = 0.40f; b = 0.40f;
+                                break;
+                            case AgentRole.error:
+                                prefix = "Error: ";
+                                r = 0.67f; g = 0.27f; b = 0.26f;
+                                break;
+                            case AgentRole.status:
+                                prefix = "";
+                                r = 0.56f; g = 0.56f; b = 0.56f;
+                                break;
+                        }
+                        dcad_gui_text_colored(
+                            (prefix ~ msg.text ~ "\n\n").toStringz, r, g, b, 1);
+                    }
+                    if (agent.revision != agentRevision)
+                    {
+                        dcad_gui_set_scroll_here_y(1.0f);
+                        agentRevision = agent.revision;
+                    }
+                }
                 dcad_gui_end_child();
+
+                dcad_gui_spacing();
+                dcad_gui_input_text_multiline("##agent-prompt", agentPrompt.ptr,
+                    cast(int) agentPrompt.length, ww - 24, 64,
+                    inputTextFlagsCtrlEnterForNewLine |
+                    inputTextFlagsNoHorizontalScroll |
+                    inputTextFlagsWordWrap);
+                bool sendPressed = false;
+                if (dcad_gui_is_item_active() != 0)
+                {
+                    // Enter sends; Cmd/Ctrl+Enter inserts a newline. The global
+                    // Cmd/Ctrl+Enter script shortcut is suppressed below.
+                    if (dcad_gui_key_chord_pressed(keyEnter) != 0)
+                        sendPressed = true;
+                }
+                if (dcad_gui_button(agent.busy ? "Running..." : "Send") != 0)
+                    sendPressed = true;
+                if (sendPressed && !agent.busy)
+                {
+                    import std.string : fromStringz;
+                    auto text = fromStringz(agentPrompt.ptr).idup;
+                    if (agent.send(text, currentFile))
+                    {
+                        agentPrompt[] = '\0';
+                        status = "Agent prompt sent";
+                    }
+                }
+                dcad_gui_same_line();
+                dcad_gui_align_text_to_frame_padding();
+                dcad_gui_text_colored(agent.status.toStringz,
+                                      0.63f, 0.71f, 0.42f, 1);
             }
         }
         dcad_gui_end();
 
         // Run after the editor frame so text is up to date.
-        if (doRun)
+        if (doRun && !suppressRun)
             doRunScript();
 
         // ---------------- Viewport pane ----------------

@@ -7,9 +7,12 @@
 module script_host_smoke;
 
 import std.stdio : writeln, stderr;
+import std.algorithm : startsWith;
 import std.file : exists, readText, mkdirRecurse, tempDir;
 import std.path : buildPath;
 import std.conv : to;
+import gui.agent : AgentMessage, AgentRole, agentCacheDir,
+                   decodeAgentLine, makeSessionId;
 import gui.platform : processId, resourceRoot;
 import gui.project : Project;
 import gui.script_host : ScriptHost;
@@ -99,6 +102,46 @@ int main()
         return 1;
     }
 
-    writeln("PASS: script host forms, TOML project scaffold and daimochi joint");
+    // Agent tab: the JSON stream is decoded into a coalesced transcript, and
+    // its state is kept in the app cache rather than in the project tree.
+    AgentMessage[] transcript;
+    string agentStatus = "idle";
+    decodeAgentLine(`{"type":"text","part":{"id":"p1","text":"Hello "}}`,
+                    transcript, agentStatus);
+    decodeAgentLine(`{"type":"text","part":{"id":"p1","text":"world"}}`,
+                    transcript, agentStatus);
+    if (transcript.length != 1 ||
+        transcript[0].role != AgentRole.assistant ||
+        transcript[0].text != "Hello world")
+    {
+        stderr.writeln("agent text deltas were not coalesced");
+        return 1;
+    }
+    decodeAgentLine(`{"type":"tool_use","part":{"tool":"read","state":` ~
+                    `{"status":"completed","title":"Read file","output":"ok"}}}`,
+                    transcript, agentStatus);
+    if (transcript.length != 2 || transcript[1].role != AgentRole.tool ||
+        transcript[1].text != "Tool Read file (completed)\nok")
+    {
+        stderr.writeln("agent tool event was not displayed");
+        return 1;
+    }
+    decodeAgentLine(`{"type":"error","error":{"type":"provider.free-limit",` ~
+                    `"message":"limit reached"}}`, transcript, agentStatus);
+    if (transcript.length != 3 || transcript[2].role != AgentRole.error ||
+        agentStatus != "Agent error")
+    {
+        stderr.writeln("agent error event was not displayed");
+        return 1;
+    }
+    immutable session = makeSessionId(project.root, 42);
+    if (!session.startsWith("ses") || agentCacheDir().startsWith(project.root))
+    {
+        stderr.writeln("agent session cache is not app-local: ", session,
+                       " / ", agentCacheDir());
+        return 1;
+    }
+
+    writeln("PASS: script host forms, TOML project scaffold, daimochi joint and agent bridge");
     return 0;
 }

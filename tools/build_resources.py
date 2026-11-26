@@ -99,6 +99,44 @@ def macos_libraries(stage):
     return True
 
 
+def linux_library_roots():
+    """Bounded directories to search for shared libraries.
+
+    A recursive `/usr/lib/**` glob follows symlinked trees (notably `/lib`) and
+    walks debug/build-id directories forever on some hosted runners. Every
+    library we need lives either directly in a multiarch directory or in a
+    directory named by LD_LIBRARY_PATH, so one level is enough.
+    """
+    roots = ["/usr/lib/*", "/usr/local/lib/*", "/usr/lib", "/usr/local/lib"]
+    for part in os.environ.get("LD_LIBRARY_PATH", "").split(os.pathsep):
+        part = part.rstrip("/")
+        if part:
+            roots.append(part)
+    return roots
+
+
+def linux_ldconfig_index():
+    """Map sonames to paths from ldconfig, when available."""
+    index = {}
+    try:
+        result = subprocess.run(["ldconfig", "-p"], check=False,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return index
+    for line in result.stdout.splitlines():
+        if "=>" not in line:
+            continue
+        fields = line.split()
+        if not fields:
+            continue
+        soname = fields[0]
+        path = line.split("=>", 1)[1].strip()
+        if soname and path:
+            index.setdefault(soname, path)
+    return index
+
+
 def linux_libraries(stage):
     """Best-effort copy of the OCCT/GLFW runtime used by this build."""
     lib = stage / "lib"
@@ -109,11 +147,19 @@ def linux_libraries(stage):
         "TKOffset", "TKXSBase", "TKMesh", "TKSTEP", "TKSTEPBase",
         "TKSTEPAttr", "TKSTEP209", "TKXDESTEP", "TKXDEIGES", "glfw",
     ]
+    ldconfig = linux_ldconfig_index()
+    roots = linux_library_roots()
     found = []
     for name in names:
+        prefix = "lib" + name + ".so"
         matches = []
-        for root in ["/usr/lib", "/lib", "/usr/local/lib"]:
-            matches += glob.glob(f"{root}/**/lib{name}.so*", recursive=True)
+        if prefix in ldconfig:
+            matches.append(ldconfig[prefix])
+        for soname, path in ldconfig.items():
+            if soname.startswith(prefix + "."):
+                matches.append(path)
+        for root in roots:
+            matches += glob.glob(f"{root}/{prefix}*")
         matches = [m for m in matches if Path(m).is_file()]
         if not matches:
             continue
@@ -121,7 +167,7 @@ def linux_libraries(stage):
         versioned = lib / source.name
         shutil.copy2(source, versioned)
         found.append(versioned)
-        symlink_path = lib / f"lib{name}.so"
+        symlink_path = lib / prefix
         if symlink_path != versioned:
             shutil.copy2(source, symlink_path)
     return bool(found)
@@ -170,12 +216,14 @@ def main():
             add_file(zf, ROOT / ("dcad.lib" if WINDOWS else "libdcad.a"),
                      "dcad.lib" if WINDOWS else "libdcad.a")
 
+            print("  STAGE platform libraries", flush=True)
             if WINDOWS:
                 has_libs = windows_libraries(stage)
             elif MACOS and os.environ.get("DCAD_EMBED_SYSTEM_LIBS") != "0":
                 has_libs = macos_libraries(stage)
             elif os.environ.get("DCAD_EMBED_SYSTEM_LIBS") != "0":
                 has_libs = linux_libraries(stage)
+            print("  STAGE platform libraries done", flush=True)
 
             for path in sorted(stage.rglob("*")):
                 if path.is_file():
