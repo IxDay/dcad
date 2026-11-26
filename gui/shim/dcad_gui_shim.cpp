@@ -59,6 +59,7 @@ static std::string g_resourceRoot;
 // pixels. On HiDPI displays the D host multiplies every fixed layout value by
 // this factor; the shim scales fonts, style metrics and icon buttons to match.
 static float g_uiScale = 1.0f;
+static bool g_forceDefaultFont = false;
 
 static void loadGuiFont(ImGuiIO& io);
 
@@ -110,6 +111,44 @@ extern "C" float dcad_gui_scale(void)
     return g_uiScale;
 }
 
+/// Headless regression check: build the fallback font at a non-default scale
+/// and pump enough frames to trigger ImGui's frame-2 font heuristic check.
+/// No GLFW window or renderer is needed, so the acceptance suite can call it.
+extern "C" int dcad_gui_font_selftest(void)
+{
+    std::string savedRoot = g_resourceRoot;
+    float savedScale = g_uiScale;
+    bool savedForce = g_forceDefaultFont;
+    g_resourceRoot = "dcad-missing-assets";
+    g_forceDefaultFont = true;
+    g_uiScale = 1.5f;
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.DisplaySize = ImVec2(800.0f, 600.0f);
+    io.DisplayFramebufferScale = ImVec2(1.0f, 1.0f);
+    io.DeltaTime = 1.0f / 60.0f;
+    // As in the OpenGL backend, let ImGui build the atlas lazily on frame 1.
+    io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
+    loadGuiFont(io);
+    // GLFW updates the framebuffer scale on the first backend frame. On a
+    // high-DPI display that changes the heuristic that used to assert.
+    io.DisplayFramebufferScale = ImVec2(1.5f, 1.5f);
+    for (int frame = 0; frame < 6; frame++)
+    {
+        ImGui::NewFrame();
+        ImGui::Begin("font selftest");
+        ImGui::Text("Aa");
+        ImGui::End();
+        ImGui::EndFrame();
+    }
+    ImGui::DestroyContext();
+    g_resourceRoot = savedRoot;
+    g_forceDefaultFont = savedForce;
+    g_uiScale = savedScale;
+    return 1;
+}
+
 static bool fileExists(const std::string& path)
 {
     FILE* f = std::fopen(path.c_str(), "rb");
@@ -159,20 +198,26 @@ static void loadGuiFont(ImGuiIO& io)
         bundledFont.c_str(),
         homeFont,
     };
-    for (const char* path : textCandidates)
-    {
-        if (!path || !*path) continue;
-        if (addFontFromAsset(io, path, 15.0f * g_uiScale, textRange))
+    if (!g_forceDefaultFont)
+        for (const char* path : textCandidates)
         {
-            haveTextFont = true;
-            break;
+            if (!path || !*path) continue;
+            if (addFontFromAsset(io, path, 15.0f * g_uiScale, textRange))
+            {
+                haveTextFont = true;
+                break;
+            }
         }
-    }
     if (!haveTextFont)
     {
+        // Do not use AddFontDefault(): its bitmap/vector heuristic compares
+        // state at load time with state on frame 2 and asserts if the scale is
+        // set before init. Choose the scalable fallback explicitly instead.
+        std::fprintf(stderr,
+                     "gui font not found: assets/MesloLGS_NF_Regular.ttf\n");
         ImFontConfig config;
         config.SizePixels = 15.0f * g_uiScale;
-        io.Fonts->AddFontDefault(&config);
+        io.Fonts->AddFontDefaultVector(&config);
     }
 }
 
@@ -339,6 +384,10 @@ extern "C" void dcad_gui_apply_light_theme(void)
     c[ImGuiCol_NavWindowingDimBg]      = broc(0x000000, 0.1f);
     c[ImGuiCol_ModalWindowDimBg]       = broc(0x000000, 0.25f);
 
+    // Keep ImGui's own text metrics in sync with the font loaded above. The
+    // default is derived from the font's legacy size on the first frame, but
+    // setting it explicitly avoids any heuristic depending on init order.
+    s.FontSizeBase = 15.0f * g_uiScale;
     if (g_uiScale != 1.0f) s.ScaleAllSizes(g_uiScale);
 }
 

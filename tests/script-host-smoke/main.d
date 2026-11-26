@@ -9,18 +9,36 @@ module script_host_smoke;
 import std.stdio : writeln, stderr;
 import std.algorithm : startsWith;
 import std.algorithm.searching : canFind;
-import std.file : exists, readText, mkdirRecurse, tempDir;
+import std.file : exists, readText, mkdirRecurse, tempDir, getcwd, chdir;
 import std.path : baseName, buildPath;
 import std.process : environment;
 import std.conv : to;
 import gui.agent : AgentMessage, AgentRole, agentCacheDir,
                    decodeAgentLine, makeSessionId;
+import gui.imgui : dcad_gui_font_selftest;
 import gui.platform : processId, resourceRoot;
 import gui.project : Project;
 import gui.script_host : ScriptHost;
 
 int main()
 {
+    // Force the no-bundled-font fallback at a scaled size and run ImGui's
+    // frame-2 checks; this used to assert at startup on Windows high-DPI.
+    // Run from an empty directory so the shim cannot find the checkout's
+    // gui/assets through its relative fallback candidates.
+    immutable fontWorkDir = buildPath(tempDir(), "dcad-font-selftest-"
+                                      ~ processId.to!string);
+    mkdirRecurse(fontWorkDir);
+    immutable savedCwd = getcwd();
+    chdir(fontWorkDir);
+    immutable fontOk = dcad_gui_font_selftest() == 1;
+    chdir(savedCwd);
+    if (!fontOk)
+    {
+        stderr.writeln("ImGui fallback font self-test failed");
+        return 1;
+    }
+
     // Release CI points this at the extracted launcher payload, so the same
     // script tests run against the private toolchain shipped to users.
     immutable overrideRoot = environment.get("DCAD_SCRIPT_HOST_ROOT", "");

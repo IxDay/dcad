@@ -141,6 +141,10 @@ subPackage {
     dependency "dcad" version="*"
     preBuildCommands "$PACKAGE_DIR/gui/tools/build-gui-shim.sh" platform="posix"
     preBuildCommands "python $PACKAGE_DIR/tools/build_shims.py gui" platform="windows"
+    lflags "$PACKAGE_DIR/build/libdcad_gui_shim.a" platform="posix"
+    lflags "$PACKAGE_DIR/build/dcad_gui_shim.lib" platform="windows"
     # platform.d declares GLFW's native-handle accessors on every OS.
     libs "glfw3_mt" "opengl32" "user32" "gdi32" platform="windows"
+    extraDependencyFiles "gui/shim/dcad_gui_shim.cpp" \
+                         "gui/tools/build-gui-shim.sh" "tools/build_shims.py"
 }

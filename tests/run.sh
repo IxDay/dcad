@@ -57,9 +57,28 @@ if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
     test -f "$ROOT/project-template/daimochi/.dcad.toml"
     test -f "$ROOT/libdcad.a" || test -f "$ROOT/dcad.lib"
     test -d "$ROOT/assets/icons"
+    test -s "$ROOT/assets/icons/refresh.png"
+    test -s "$ROOT/assets/MesloLGS_NF_Regular.ttf"
     test -f "$ROOT/samples/coffee-table/table.d"
     test -d "$ROOT/samples/coffee-table"
     test -d "$ROOT/source"
+
+    # A cache marked current but missing its assets must repair itself. This
+    # covers interrupted extractions and stale caches from earlier builds.
+    rm -f "$ROOT/assets/icons/refresh.png"
+    rm -f "$ROOT_FILE"
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            DCAD_PRINT_ROOT_FILE="$ROOT_FILE" ./dcad-launcher.exe --print-root >/dev/null 2>&1
+            ;;
+        *)
+            DCAD_PRINT_ROOT_FILE="$ROOT_FILE" ./dcad-launcher --print-root >/dev/null 2>&1
+            ;;
+    esac
+    test -s "$ROOT/assets/icons/refresh.png" || {
+        echo "launcher did not repair an incomplete cache" >&2
+        exit 1
+    }
     case "$(uname -s)" in
         MINGW*|MSYS*|CYGWIN*)
             test -x "$ROOT/toolchain/bin/ldc2.exe"

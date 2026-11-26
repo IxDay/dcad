@@ -71,7 +71,9 @@ new-project template and (where available) OCCT/GLFW libraries. On first launch
 it expands them into a versioned cache under the user's data directory and runs
 the GUI from there, so a downloaded binary works from any working directory
 with no system OCCT/GLFW install. Pushing a tag also publishes those archives
-as a GitHub Release.
+as a GitHub Release. While the GUI is still being validated, the release tag is
+the rolling `0.1.0` marker: each update deletes the previous release and
+force-pushes `0.1.0` to the validated commit instead of creating a new version.
 
 The macOS archive contains `dcad.app` with the real GUI and its resources inside
 `Contents/`, so Finder opens the application directly instead of Terminal. It is

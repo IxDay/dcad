@@ -81,6 +81,7 @@ extern(C) nothrow @nogc
     void dcad_gui_apply_light_theme();
     void dcad_gui_apply_zed_theme();
     void dcad_gui_shutdown();
+    int dcad_gui_font_selftest();
     void dcad_gui_new_frame();
     void dcad_gui_render();
     void dcad_gui_dockspace();

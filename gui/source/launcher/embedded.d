@@ -113,6 +113,16 @@ private string cacheBase()
     return buildPath("/tmp", "dcad-runtime");
 }
 
+/// A cache can be marked current while a previous extraction was interrupted
+/// or partially cleaned. Check a few files the GUI always needs so that such
+/// a cache repairs itself instead of reporting missing icons and fonts.
+private bool runtimeComplete(string root)
+{
+    return exists(buildPath(root, "assets", "icons", "refresh.png")) &&
+           exists(buildPath(root, "assets", "MesloLGS_NF_Regular.ttf")) &&
+           exists(buildPath(root, "samples", "coffee-table", "table.d"));
+}
+
 /// Extract the payload if needed and return its resolved directory.
 ResourceState prepareResources()
 {
@@ -128,7 +138,8 @@ ResourceState prepareResources()
     state.root = buildPath(cacheBase(), "v" ~ state.versionTag);
 
     auto marker = buildPath(state.root, "resource-version.txt");
-    if (!exists(marker) || readText(marker) != state.versionTag)
+    if (!exists(marker) || readText(marker) != state.versionTag ||
+        !runtimeComplete(state.root))
         extract(bytes, state.root, state.versionTag);
 
     auto manifest = buildPath(state.root, "embedded.manifest");
