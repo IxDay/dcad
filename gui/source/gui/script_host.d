@@ -464,6 +464,12 @@ public:
                 // staged LDC libs cover UCRT and vcruntime; the generated
                 // import library supplies the legacy names Phobos references
                 // (execv, fileno, open, tzset, ...) from ucrtbase.dll.
+                // ldc_rt.builtins injects /DEFAULTLIB:libcmt, which on a
+                // developer machine pulls the static CRT and its libucrt
+                // defaults. Those clash with the DLL CRT below.
+                cmd ~= "-L/NODEFAULTLIB:libcmt";
+                cmd ~= "-L/NODEFAULTLIB:libcmtd";
+                cmd ~= "-L/NODEFAULTLIB:libucrt";
                 cmd ~= "-L/DEFAULTLIB:ucrtbase";
                 cmd ~= "-L/DEFAULTLIB:dcad-crt-legacy";
                 childEnv = environment.toAA();
