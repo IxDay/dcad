@@ -37,9 +37,10 @@ re-mesh.
 The left sidebar shows the current project's directory with the exact file icons
 VS Code uses (its built-in Seti icon theme, extracted to PNGs). Click a disclosure
 arrow to expand or collapse folders, and click a file to load it into the editor.
-The sidebar is always visible. By default the bundled coffee-table sample is
-open; **File > New Project...** (Cmd/Ctrl+N) scaffolds the three-piece
-daimochi-tsugi joint in a folder you choose, opens `main.d` and runs its
+The sidebar is always visible. Startup opens the bundled coffee-table sample
+directly: there is no recent-project list, folder picker or "create a project?"
+prompt until you choose **File > New Project...** (Cmd/Ctrl+N), which scaffolds
+the three-piece daimochi-tsugi joint in a folder you choose, opens `main.d` and runs its
 take-apart animation. You can also pass a project directory, `.dcad.toml` or a
 `.d` file to `dcad-gui` on the command line; **Save** always writes the open file
 in that directory. Each coffee-table element has its own module, which you can

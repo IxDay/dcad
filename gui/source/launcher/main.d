@@ -162,10 +162,15 @@ private string prependPath(string name, string directory)
 
 version (Windows)
 {
-    /// GUI entry point: no console is created for this process.
+    /// GUI entry point: no console is created for this process. LDC only
+    /// initialises the D runtime around a regular `main`, so a custom WinMain
+    /// must do it explicitly before touching Phobos or `Runtime.args`.
     extern (Windows)
     int WinMain(void* hInstance, void* hPrevInstance, char* lpCmdLine, int nCmdShow)
     {
+        if (!Runtime.initialize())
+            return 1;
+        scope(exit) Runtime.terminate();
         return launch(Runtime.args);
     }
 }
