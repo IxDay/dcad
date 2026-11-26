@@ -225,9 +225,12 @@ def main():
                 has_libs = linux_libraries(stage)
             print("  STAGE platform libraries done", flush=True)
 
+            # `stage` already mirrors the payload root (it contains lib/).
+            # Prefixing another "lib/" would produce lib/lib/*.dll, which the
+            # launcher does not see when it stages DLLs next to the inner GUI.
             for path in sorted(stage.rglob("*")):
                 if path.is_file():
-                    zf.write(path, "lib/" + path.relative_to(stage).as_posix())
+                    zf.write(path, path.relative_to(stage).as_posix())
             zf.writestr("embedded.manifest",
                         "dcad=1\nlibs=" + ("1" if has_libs else "0") + "\n")
         else:

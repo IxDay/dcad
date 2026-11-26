@@ -136,18 +136,17 @@ jobs:
           ldc2 --version
           bash tests/run.sh
 
-      # The archive carries only the self-extracting binary and its README.
+      # macOS gets a .app bundle (no Terminal); Windows uses a GUI-subsystem
+      # launcher (no console); Linux gets a Terminal=false desktop entry.
       - name: Package target
+        env:
+          DCAD_VERSION: ${{ github.ref_name }}
         run: |
           set -eu
           TARGET="dcad-${{ matrix.name }}"
-          mkdir -p "payload/$TARGET" dist
-          if [ -f dcad-launcher.exe ]; then
-            cp dcad-launcher.exe "payload/$TARGET/dcad-gui.exe"
-          else
-            cp dcad-launcher "payload/$TARGET/dcad-gui"
-          fi
-          cp README.md "payload/$TARGET/"
+          mkdir -p dist
+          python3 tools/package_release.py "$TARGET" \
+            --out payload --version "$DCAD_VERSION"
           tar -czf "dist/$TARGET.tar.gz" -C payload "$TARGET"
 
       - name: Upload GUI package

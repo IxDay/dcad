@@ -85,6 +85,18 @@ struct Project
         return result;
     }
 
+    /// The sample opened when no project argument is supplied. It must be a
+    /// real project directory: using the runtime root would show every SDK,
+    /// asset and template folder in the file tree.
+    static Project bundled(string runtimeRoot)
+    {
+        Project result;
+        result.root = buildPath(runtimeRoot, "samples", "coffee-table");
+        result.name = "coffee-table";
+        result.entry = "table.d";
+        return result;
+    }
+
     /// Copy the bundled template into `target`. The target must not exist.
     static Project create(string target, string templateRoot)
     {

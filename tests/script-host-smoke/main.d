@@ -9,7 +9,7 @@ module script_host_smoke;
 import std.stdio : writeln, stderr;
 import std.algorithm : startsWith;
 import std.file : exists, readText, mkdirRecurse, tempDir;
-import std.path : buildPath;
+import std.path : baseName, buildPath;
 import std.conv : to;
 import gui.agent : AgentMessage, AgentRole, agentCacheDir,
                    decodeAgentLine, makeSessionId;
@@ -23,6 +23,17 @@ int main()
     immutable workDir = buildPath(tempDir(), "dcad-script-host-smoke-"
                                   ~ processId.to!string);
     mkdirRecurse(workDir);
+
+    // The implicit project is the sample directory, not the runtime cache, so
+    // the file tree shows only project sources.
+    auto bundled = Project.bundled(root);
+    if (baseName(bundled.root) != "coffee-table" ||
+        bundled.entry != "table.d" || !exists(bundled.entryPath()))
+    {
+        stderr.writeln("bundled default project is not the coffee-table sample");
+        return 1;
+    }
+
     auto host = new ScriptHost(workDir, root);
 
     // Legacy body-style script: the source is injected into dcad_script_run.

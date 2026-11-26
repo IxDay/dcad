@@ -15,7 +15,9 @@ dub run :gui
 A released binary needs no such install: `dcad-gui` is a self-extracting
 launcher. It expands its embedded GUI, icons, fonts, D sources, static libraries,
 project template and OCCT/GLFW libraries into a versioned cache under the user's
-data directory, then starts the GUI from there.
+data directory, then starts the GUI from there. macOS ships it inside `dcad.app`
+so Finder does not open Terminal; the Windows launcher uses the GUI subsystem so
+no console window appears; Linux includes a `Terminal=false` desktop entry.
 
 The window opens the real tracked file `samples/coffee-table/table.d` and
 renders it in your VS Code **Base16 Default Light** palette (`#f8f8f8` editor, `#f9f9f9` sidebar,

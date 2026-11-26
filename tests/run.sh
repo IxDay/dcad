@@ -32,12 +32,18 @@ if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
         python3 tools/relocate_macos.py
     fi
     dub build :gui-launcher "$BUILD_FLAG"
+    python3 tools/check_payload.py build/dcad_payload.bin
 
+    # GUI-subsystem launchers have no console to print to, so ask them to write
+    # the cache root to a file instead. The same mechanism works everywhere.
+    ROOT_FILE="$PWD/build/launcher-root.txt"
+    rm -f "$ROOT_FILE"
     if [ -x ./dcad-launcher ]; then
-        ROOT=$(./dcad-launcher --print-root)
+        DCAD_PRINT_ROOT_FILE="$ROOT_FILE" ./dcad-launcher --print-root >/dev/null 2>&1
     else
-        ROOT=$(./dcad-launcher.exe --print-root)
+        DCAD_PRINT_ROOT_FILE="$ROOT_FILE" ./dcad-launcher.exe --print-root >/dev/null 2>&1
     fi
+    ROOT=$(cat "$ROOT_FILE")
     test -f "$ROOT/dcad-gui" || test -f "$ROOT/dcad-gui.exe"
     test -f "$ROOT/project-template/daimochi/.dcad.toml"
     test -f "$ROOT/libdcad.a" || test -f "$ROOT/dcad.lib"

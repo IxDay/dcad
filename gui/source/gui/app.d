@@ -50,7 +50,7 @@ extern(C) void dcad_new_project_callback()
 }
 
 // Startup opens a real, tracked script file. There is no hidden session file.
-private enum string defaultFile = "samples/coffee-table/table.d";
+private enum string defaultProjectDir = "samples/coffee-table";
 private enum float sidebarWidth = 220f;
 private enum float partsOverlayWidth = 170f;
 private enum float iconSize = 18f;
@@ -114,7 +114,14 @@ private string partSourceFile(string id, string projectRoot)
                                                   moduleName = "top_inner";
     else if (id.startsWith("wedge-"))            moduleName = "wedge";
     else return null;
-    return buildPath("samples/coffee-table", moduleName ~ ".d");
+
+    // New projects opened from the sample directory use flat module names;
+    // older launches used the cache root with samples/coffee-table nested.
+    auto relative = moduleName ~ ".d";
+    if (exists(buildPath(projectRoot, relative))) return relative;
+    relative = buildPath(defaultProjectDir, moduleName ~ ".d");
+    if (exists(buildPath(projectRoot, relative))) return relative;
+    return null;
 }
 
 private void* iconTexture(string name)
@@ -183,11 +190,7 @@ void main(string[] args)
             stderr.writeln("cannot open project ", args[1], ": ", e.msg);
     }
     if (project.root.length == 0)
-    {
-        project.root = root;
-        project.name = "samples";
-        project.entry = defaultFile;
-    }
+        project = Project.bundled(root);
     string projectRoot = project.root;
     string currentFile = project.entry;
 

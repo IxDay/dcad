@@ -71,7 +71,13 @@ new-project template and (where available) OCCT/GLFW libraries. On first launch
 it expands them into a versioned cache under the user's data directory and runs
 the GUI from there, so a downloaded binary works from any working directory
 with no system OCCT/GLFW install. Pushing a tag also publishes those archives
-as a GitHub Release. On Windows the
+as a GitHub Release.
+
+The macOS archive contains `dcad.app`, so Finder opens the GUI directly instead
+of Terminal. The Windows launcher is built with the GUI subsystem and a WinMain
+entry point, so no console window appears; fatal errors use a message box. The
+Linux archive includes a `Terminal=false` desktop entry for the same behaviour.
+On Windows the
 CI downloads the official OCCT 7.9.3 `vc14-64` archive, its matching `3rdparty`
 archive (for `TKernel`'s jemalloc/TBB and the media/image dependencies reached
 via `TKDESTEP`), and GLFW 3.4's prebuilt WIN64 binaries. Headers, `.lib` files

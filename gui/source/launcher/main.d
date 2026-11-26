@@ -6,10 +6,15 @@
  * libraries. On first launch those are expanded into a versioned cache under
  * the user's data directory; the real GUI is then started from there, so it
  * never needs OCCT, GLFW or an asset directory installed on the host.
+ *
+ * The Windows build uses the GUI subsystem and a WinMain entry point, so
+ * double-clicking it never allocates a console window. The POSIX build uses a
+ * normal main because .app bundles and desktop launchers already suppress a
+ * terminal.
  */
 module launcher.main;
 
-import std.file : exists, copy, dirEntries, SpanMode;
+import std.file : exists, copy, dirEntries, SpanMode, write;
 import std.path : baseName, buildPath;
 import std.stdio : stderr, writeln;
 import std.string : toStringz;
@@ -17,40 +22,56 @@ import std.string : toStringz;
 version (Posix)
     import std.process : execv;
 version (Windows)
+{
+    import core.runtime : Runtime;
     import std.process : spawnProcess, wait;
+}
 
 import launcher.embedded : prepareResources;
 
-private string prependPath(string name, string directory)
+/// Fatal errors cannot go to a console in a GUI-subsystem Windows build, so
+/// show them in a native message box there and on stderr on POSIX.
+private void reportError(string text)
 {
-    import core.stdc.stdlib : getenv;
-    import std.string : fromStringz;
-
-    const current = getenv(name.toStringz);
-    auto value = current is null ? "" : fromStringz(current).idup;
     version (Windows)
-        enum sep = ';';
+    {
+        import core.sys.windows.winuser : MessageBoxA, MB_OK, MB_ICONERROR;
+
+        MessageBoxA(null, ("dcad: " ~ text).toStringz, "dcad".toStringz,
+                    MB_OK | MB_ICONERROR);
+    }
     else
-        enum sep = ':';
-    return value.length ? directory ~ sep ~ value : directory;
+        stderr.writeln("dcad: ", text);
 }
 
-int main(string[] args)
+/// `--print-root` is used by the acceptance suite. A GUI-subsystem binary has
+/// no stdout, so an environment variable can redirect the answer to a file.
+private void printRoot(string root, string[] args)
+{
+    if (args.length < 2 || args[1] != "--print-root") return;
+
+    import std.process : environment;
+
+    immutable diagnostic = environment.get("DCAD_PRINT_ROOT_FILE", "");
+    if (diagnostic.length)
+        write(diagnostic, root);
+    else
+        writeln(root);
+}
+
+private int launch(string[] args)
 {
     auto state = prepareResources();
     if (!state.embedded || !exists(state.root))
     {
-        stderr.writeln("dcad: this build has no embedded runtime payload; "
-                       ~ "run the GUI from a source checkout instead");
+        reportError("this build has no embedded runtime payload; "
+                    ~ "run the GUI from a source checkout instead");
         return 1;
     }
 
-    // Optional diagnostic used by the release smoke tests.
+    printRoot(state.root, args);
     if (args.length > 1 && args[1] == "--print-root")
-    {
-        writeln(state.root);
         return 0;
-    }
 
     version (Windows)
         enum innerName = "dcad-gui.exe";
@@ -59,7 +80,7 @@ int main(string[] args)
     immutable inner = buildPath(state.root, innerName);
     if (!exists(inner))
     {
-        stderr.writeln("dcad: embedded GUI binary is missing from ", state.root);
+        reportError("embedded GUI binary is missing from " ~ state.root);
         return 1;
     }
 
@@ -76,7 +97,8 @@ int main(string[] args)
     version (Windows)
     {
         // Windows searches for DLLs next to the executable. Keep import
-        // libraries in lib/ for the hot compiler, but stage every DLL flat.
+        // libraries in lib/ for the hot compiler, but stage every DLL flat
+        // beside the inner GUI. The payload stores them under lib/ directly.
         auto libDir = buildPath(state.root, "lib");
         if (exists(libDir))
             foreach (entry; dirEntries(libDir, "*.dll", SpanMode.shallow))
@@ -110,7 +132,7 @@ int main(string[] args)
             return wait(spawnProcess(childArgs));
         catch (Exception e)
         {
-            stderr.writeln("dcad: failed to start ", inner, ": ", e.msg);
+            reportError("failed to start " ~ inner ~ ": " ~ e.msg);
             return 1;
         }
     }
@@ -119,7 +141,38 @@ int main(string[] args)
         // execv replaces this process, so exit codes and signals are those of
         // the GUI itself and no launcher process stays behind.
         execv(inner, args);
-        stderr.writeln("dcad: failed to start ", inner);
+        reportError("failed to start " ~ inner);
         return 1;
+    }
+}
+
+private string prependPath(string name, string directory)
+{
+    import core.stdc.stdlib : getenv;
+    import std.string : fromStringz;
+
+    const current = getenv(name.toStringz);
+    auto value = current is null ? "" : fromStringz(current).idup;
+    version (Windows)
+        enum sep = ';';
+    else
+        enum sep = ':';
+    return value.length ? directory ~ sep ~ value : directory;
+}
+
+version (Windows)
+{
+    /// GUI entry point: no console is created for this process.
+    extern (Windows)
+    int WinMain(void* hInstance, void* hPrevInstance, char* lpCmdLine, int nCmdShow)
+    {
+        return launch(Runtime.args);
+    }
+}
+else
+{
+    int main(string[] args)
+    {
+        return launch(args);
     }
 }

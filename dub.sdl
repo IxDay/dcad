@@ -118,6 +118,9 @@ subPackage {
     preBuildCommands "python $PACKAGE_DIR/tools/build_shims.py launcher"
     lflags "$PACKAGE_DIR/build/dcad_resources.o" platform="posix"
     lflags "$PACKAGE_DIR/build/dcad_resources.res" platform="windows"
+    # No console window on Windows: the launcher uses WinMain and shows fatal
+    # errors in a message box instead.
+    lflags "/SUBSYSTEM:WINDOWS" platform="windows"
     extraDependencyFiles "gui/source/launcher/embedded.d" \
                          "tools/build_shims.py" "tools/build_resources.py" \
                          "tools/relocate_macos.py" \
