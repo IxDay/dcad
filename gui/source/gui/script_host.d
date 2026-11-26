@@ -466,10 +466,17 @@ public:
                 cmd ~= "-L/LIBPATH:" ~ buildPath(toolLib, "msvc");
                 cmd ~= "-L/LIBPATH:" ~ toolLib;
                 cmd ~= "-L/LIBPATH:" ~ buildPath(toolLib, "mingw");
-                // Visual Studio normally supplies these through LIB. The
-                // staged LDC libs cover UCRT and vcruntime; the generated
-                // import library supplies the legacy names Phobos references
-                // (execv, fileno, open, tzset, ...) from ucrtbase.dll.
+                // LDC and legacy stdio still request DLL CRT import libraries
+                // (vcruntime140/ucrtbase). Those define the same NLG/TLS
+                // helpers as the staged static libvcruntime/libucrt and cause
+                // duplicate symbols such as __NLG_Return2. The static CRT
+                // covers those helpers, while the generated library below
+                // imports only the legacy POSIX names (execv, fileno, open,
+                // tzset, ...) that Phobos references from ucrtbase.dll.
+                cmd ~= "-L/NODEFAULTLIB:vcruntime140";
+                cmd ~= "-L/NODEFAULTLIB:vcruntime140d";
+                cmd ~= "-L/NODEFAULTLIB:ucrtbase";
+                cmd ~= "-L/NODEFAULTLIB:ucrtbased";
                 cmd ~= "-L/DEFAULTLIB:dcad-crt-legacy";
                 childEnv = environment.toAA();
                 // execute() merges a supplied env with the parent's unless
