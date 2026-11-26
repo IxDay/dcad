@@ -242,6 +242,10 @@ MSVC_LINK_LIBS = [
     "advapi32.lib",
     "oldnames.lib",
     "legacy_stdio_definitions.lib",
+    # These are pulled in by legacy_stdio_definitions when printf-style wide
+    # format checking is enabled in the bundled shims.
+    "legacy_stdio_wide_specifiers.lib",
+    "legacy_stdio_secure_open.lib",
 ]
 
 

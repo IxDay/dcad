@@ -38,6 +38,7 @@ def main():
                 "toolchain/lib/msvc/libcpmt.lib",
                 "toolchain/lib/msvc/libucrt.lib",
                 "toolchain/lib/msvc/kernel32.lib",
+                "toolchain/lib/msvc/legacy_stdio_wide_specifiers.lib",
                 "toolchain/lib/mingw/msvcrt.lib",
             ]
             missing = [name for name in required if name not in names]

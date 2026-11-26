@@ -86,7 +86,7 @@ subPackage {
     dependency "bindbc-glfw" version="~>1.1"
     subConfiguration "bindbc-glfw" "static"
     dependency "bindbc-opengl" version="~>1.1"
-    versions "GL_30"
+    versions "GL_30" "GLFW_33"
 
     preBuildCommands "$PACKAGE_DIR/gui/tools/build-gui-shim.sh" platform="posix"
     preBuildCommands "python $PACKAGE_DIR/tools/build_shims.py gui" platform="windows"

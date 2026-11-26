@@ -7,6 +7,7 @@
  * plain C signature; all C++ types stay inside this translation unit.
  */
 #include <cstdint>
+#include <cmath>
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
@@ -59,14 +60,49 @@ static std::string g_resourceRoot;
 // this factor; the shim scales fonts, style metrics and icon buttons to match.
 static float g_uiScale = 1.0f;
 
+static void loadGuiFont(ImGuiIO& io);
+
 extern "C" void dcad_gui_set_resource_root(const char* root)
 {
     g_resourceRoot = root ? root : "";
 }
 
+/// Windows lies about window sizes until the process declares DPI awareness.
+/// GLFW does this itself on recent versions, but doing it before glfwInit()
+/// makes the framebuffer/window ratio reliable on every supported Windows
+/// build. The loader is dynamic so no extra import library is needed.
+extern "C" void dcad_gui_enable_dpi_awareness(void)
+{
+#ifdef _WIN32
+    HMODULE user32 = ::LoadLibraryA("user32.dll");
+    if (!user32) return;
+    using SetContextFn = BOOL(WINAPI*)(void*);
+    auto setContext = reinterpret_cast<SetContextFn>(
+        ::GetProcAddress(user32, "SetProcessDpiAwarenessContext"));
+    // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 == -4.
+    if (setContext)
+        setContext(reinterpret_cast<void*>(static_cast<intptr_t>(-4)));
+    ::FreeLibrary(user32);
+#endif
+}
+
 extern "C" void dcad_gui_set_scale(float scale)
 {
-    g_uiScale = scale > 0.25f ? (scale < 4.0f ? scale : 4.0f) : 0.25f;
+    float clamped = scale > 0.25f ? (scale < 4.0f ? scale : 4.0f) : 0.25f;
+    if (std::fabs(clamped - g_uiScale) < 0.001f) return;
+    g_uiScale = clamped;
+
+    // A scale change after startup (dragging the window to another monitor)
+    // needs a font atlas at the new pixel size. The OpenGL backend rebuilds
+    // its texture on the next frame; D reapplies the scaled style separately.
+    if (ImGui::GetCurrentContext() != nullptr)
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        io.Fonts->Clear();
+        loadGuiFont(io);
+        // This backend has ImGuiBackendFlags_RendererHasTextures, so it
+        // recreates font textures from the rebuilt atlas on the next frame.
+    }
 }
 
 extern "C" float dcad_gui_scale(void)

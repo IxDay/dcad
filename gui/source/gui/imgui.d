@@ -74,6 +74,7 @@ extern(C) nothrow @nogc
 {
     // lifecycle
     void dcad_gui_set_resource_root(const(char)* root);
+    void dcad_gui_enable_dpi_awareness();
     void dcad_gui_set_scale(float scale);
     float dcad_gui_scale();
     void dcad_gui_init(void* window, const(char)* glslVersion);

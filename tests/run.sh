@@ -70,6 +70,7 @@ if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
             test -f "$ROOT/toolchain/lib/msvc/libcpmt.lib"
             test -f "$ROOT/toolchain/lib/msvc/libucrt.lib"
             test -f "$ROOT/toolchain/lib/msvc/kernel32.lib"
+            test -f "$ROOT/toolchain/lib/msvc/legacy_stdio_wide_specifiers.lib"
             test -f "$ROOT/toolchain/lib/mingw/msvcrt.lib"
 
             # The same scripts now compile through the bundled compiler with

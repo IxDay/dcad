@@ -226,6 +226,10 @@ void main(string[] args)
     }
 
     // --- GLFW / OpenGL ----------------------------------------------------
+    // On Windows a DPI-unaware process reports virtualised window sizes, so
+    // the framebuffer/window ratio below would always be 1 and the UI would
+    // stay tiny on high-DPI displays. Do this before GLFW creates any window.
+    dcad_gui_enable_dpi_awareness();
     if (glfwInit() != GLFW_TRUE)
     {
         stderr.writeln("failed to initialise GLFW");
@@ -259,31 +263,53 @@ void main(string[] args)
     glfwSwapInterval(1);
 
     // ImGui coordinates are framebuffer pixels; GLFW window sizes are screen
-    // points. On HiDPI displays the ratio is the OS scale factor. An explicit
-    // DCAD_UI_SCALE override is useful on mixed-DPI setups.
-    float requestedScale = 0f;
+    // points. Content scale and framebuffer/window ratio are both checked:
+    // GLFW reports one or the other depending on platform and GL version.
+    // DCAD_UI_SCALE remains an explicit override for mixed-DPI setups.
+    float forcedScale = 0f;
     immutable scaleOverride = environment.get("DCAD_UI_SCALE", "");
     if (scaleOverride.length)
     {
         try
-            requestedScale = scaleOverride.to!float;
+            forcedScale = scaleOverride.to!float;
         catch (Exception)
-            requestedScale = 0f;
+            forcedScale = 0f;
     }
-    if (requestedScale <= 0f)
+    bool imguiReady;
+
+    float detectedScale(GLFWwindow* w)
     {
+        float sx = 0f, sy = 0f;
+        glfwGetWindowContentScale(w, &sx, &sy);
+        float scale = sx > sy ? sx : sy;
         int framebufferW, framebufferH, windowWPoints, windowHPoints;
-        glfwGetFramebufferSize(window, &framebufferW, &framebufferH);
-        glfwGetWindowSize(window, &windowWPoints, &windowHPoints);
-        requestedScale = windowWPoints > 0 && framebufferW > 0
-            ? cast(float) framebufferW / windowWPoints : 1f;
+        glfwGetFramebufferSize(w, &framebufferW, &framebufferH);
+        glfwGetWindowSize(w, &windowWPoints, &windowHPoints);
+        if (windowWPoints > 0 && framebufferW > 0)
+        {
+            immutable ratio = cast(float) framebufferW / windowWPoints;
+            if (ratio > scale) scale = ratio;
+        }
+        return scale > 0f ? scale : 1f;
     }
-    uiScale = requestedScale < 0.5f ? 0.5f
-            : requestedScale > 4f ? 4f : requestedScale;
-    sidebarWidth = px(sidebarWidthBase);
-    partsOverlayWidth = px(partsOverlayWidthBase);
-    iconSize = px(iconSizeBase);
-    dcad_gui_set_scale(uiScale);
+
+    void refreshUiScale(GLFWwindow* w)
+    {
+        immutable requested = forcedScale > 0f ? forcedScale : detectedScale(w);
+        immutable clamped = requested < 0.5f ? 0.5f
+                          : requested > 4f ? 4f : requested;
+        if (clamped > uiScale + 0.01f || clamped < uiScale - 0.01f)
+        {
+            uiScale = clamped;
+            sidebarWidth = px(sidebarWidthBase);
+            partsOverlayWidth = px(partsOverlayWidthBase);
+            iconSize = px(iconSizeBase);
+            dcad_gui_set_scale(uiScale);
+            if (imguiReady) dcad_gui_apply_light_theme();
+        }
+    }
+
+    refreshUiScale(window);
 
     void updateTitle()
     {
@@ -303,6 +329,7 @@ void main(string[] args)
     dcad_gui_init(cast(void*) window, "#version 120");
     scope(exit) dcad_gui_shutdown();
     dcad_gui_apply_light_theme(); // Visual Studio Code Light+
+    imguiReady = true;
 
     // --- Application state ------------------------------------------------
     auto editor = dcad_textedit_new();
@@ -541,6 +568,9 @@ void main(string[] args)
         // GLFW polls; other platforms make this a no-op.
         dcad_native_menu_poll();
         glfwPollEvents();
+        // Moving the window to a monitor with a different DPI changes the
+        // framebuffer ratio; rebuild fonts and layout when that happens.
+        refreshUiScale(window);
         // CLI output is collected on a reader thread; move it to GUI-owned
         // state before any widget reads the transcript.
         agent.drain();
