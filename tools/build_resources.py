@@ -97,14 +97,20 @@ def macos_libraries(stage):
         "/usr/local/opt/glfw/lib/libglfw*.dylib",
     ]
     copied = []
+    # Homebrew installs versioned dylibs plus compatibility symlinks such as
+    # libTKernel.7.9.dylib -> libTKernel.7.9.3.dylib. The GUI and plugins link
+    # against the symlink names, so the payload must carry every alias too.
+    aliases = {}
     for pattern in patterns:
         for source in glob.glob(pattern):
             real = Path(source).resolve()
-            if real.name in [p.name for p in copied]:
-                continue
+            if real.name not in aliases:
+                aliases[real.name] = set()
+            aliases[real.name].add(Path(source).name)
             target = lib / real.name
-            shutil.copy2(real, target)
-            copied.append(target)
+            if target not in copied:
+                shutil.copy2(real, target)
+                copied.append(target)
 
     if not copied:
         return False
@@ -123,16 +129,18 @@ def macos_libraries(stage):
                 subprocess.run(["install_name_tool", "-change", old,
                                 replacement, str(path)], check=True)
 
-    # Short names are what `ldc2 -lTKernel` looks for; the versioned files
-    # stay too, for dyld's install names.
-    for path in list(copied):
+    # Reproduce the symlink names under the relocated versioned files. Files
+    # are copied rather than symlinked so ZIP extraction works everywhere.
+    for path in copied:
+        names = set(aliases.get(path.name, ()))
         stem = path.name.split(".")
         if len(stem) >= 2 and path.name.startswith("libTK"):
-            short = stem[0] + ".dylib"
-            if short != path.name:
-                shutil.copy2(path, lib / short)
+            names.add(stem[0] + ".dylib")
         if path.name.startswith("libglfw."):
-            shutil.copy2(path, lib / "libglfw.dylib")
+            names.add("libglfw.dylib")
+        for name in names:
+            if name != path.name:
+                shutil.copy2(path, lib / name)
 
     # install_name_tool invalidates the Homebrew signatures. A plugin loaded
     # with dlopen resolves these staged dylibs through @rpath and dyld kills
