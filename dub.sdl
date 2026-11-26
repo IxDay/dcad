@@ -143,7 +143,10 @@ subPackage {
     preBuildCommands "python $PACKAGE_DIR/tools/build_shims.py gui" platform="windows"
     lflags "$PACKAGE_DIR/build/libdcad_gui_shim.a" platform="posix"
     lflags "$PACKAGE_DIR/build/dcad_gui_shim.lib" platform="windows"
-    # platform.d declares GLFW's native-handle accessors on every OS.
+    # The GUI shim also contains the GLFW/OpenGL backends, so this test binary
+    # needs the same native libraries as :gui even though it never opens a
+    # window. macOS gets them through the core library's framework links.
+    libs "glfw" "GL" "X11" "Xrandr" "Xinerama" "Xcursor" "Xi" platform="linux"
     libs "glfw3_mt" "opengl32" "user32" "gdi32" platform="windows"
     extraDependencyFiles "gui/shim/dcad_gui_shim.cpp" \
                          "gui/tools/build-gui-shim.sh" "tools/build_shims.py"
