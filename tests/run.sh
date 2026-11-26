@@ -38,11 +38,20 @@ if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
     # the cache root to a file instead. The same mechanism works everywhere.
     ROOT_FILE="$PWD/build/launcher-root.txt"
     rm -f "$ROOT_FILE"
-    if [ -x ./dcad-launcher ]; then
-        DCAD_PRINT_ROOT_FILE="$ROOT_FILE" ./dcad-launcher --print-root >/dev/null 2>&1
-    else
-        DCAD_PRINT_ROOT_FILE="$ROOT_FILE" ./dcad-launcher.exe --print-root >/dev/null 2>&1
-    fi
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            # Git Bash's `test -x` can resolve .exe suffixes, but exec does not
+            # reliably; always name the Windows executable explicitly.
+            DCAD_PRINT_ROOT_FILE="$ROOT_FILE" ./dcad-launcher.exe --print-root >/dev/null 2>&1
+            ;;
+        *)
+            DCAD_PRINT_ROOT_FILE="$ROOT_FILE" ./dcad-launcher --print-root >/dev/null 2>&1
+            ;;
+    esac
+    test -f "$ROOT_FILE" || {
+        echo "launcher did not write its cache root" >&2
+        exit 1
+    }
     ROOT=$(cat "$ROOT_FILE")
     test -f "$ROOT/dcad-gui" || test -f "$ROOT/dcad-gui.exe"
     test -f "$ROOT/project-template/daimochi/.dcad.toml"
