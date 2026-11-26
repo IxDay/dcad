@@ -23,7 +23,8 @@ version (Posix)
     import std.process : execv;
 version (Windows)
 {
-    import core.runtime : Runtime;
+    import core.sys.windows.shellapi : CommandLineToArgvW;
+    import core.sys.windows.winbase : GetCommandLineW, LocalFree;
     import std.process : spawnProcess, wait;
 }
 
@@ -162,16 +163,31 @@ private string prependPath(string name, string directory)
 
 version (Windows)
 {
-    /// GUI entry point: no console is created for this process. LDC only
-    /// initialises the D runtime around a regular `main`, so a custom WinMain
-    /// must do it explicitly before touching Phobos or `Runtime.args`.
+    // CommandLineToArgvW lives in shell32.
+    pragma(lib, "shell32.lib");
+
+    // druntime's wide main wrapper sets up `string[]` arguments, initialises the
+    // GC and module constructors, catches exceptions and terminates the runtime.
+    // A custom WinMain must call it because LDC only emits that wrapper for a
+    // regular D `main`.
+    alias LauncherMainFunc = extern (C) int function(char[][] args);
+    extern (C) int _d_wrun_main(int argc, wchar** wargv,
+                                LauncherMainFunc mainFunc);
+
+    extern (C) int dcadLauncherMain(char[][] args)
+    {
+        return launch(cast(string[]) args);
+    }
+
+    /// GUI entry point: no console is created for this process.
     extern (Windows)
     int WinMain(void* hInstance, void* hPrevInstance, char* lpCmdLine, int nCmdShow)
     {
-        if (!Runtime.initialize())
-            return 1;
-        scope(exit) Runtime.terminate();
-        return launch(Runtime.args);
+        int argc;
+        auto argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+        if (argv is null) return 1;
+        scope(exit) LocalFree(argv);
+        return _d_wrun_main(argc, argv, &dcadLauncherMain);
     }
 }
 else
