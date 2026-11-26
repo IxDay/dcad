@@ -19,7 +19,7 @@ module gui.script_host;
 import std.stdio : File;
 import std.file : write, remove, exists, dirEntries, SpanMode;
 import std.path : buildPath, dirName;
-import std.process : execute, environment;
+import std.process : Config, execute, environment;
 import std.regex : ctRegex, matchFirst, replaceFirst;
 import std.algorithm.sorting : sort;
 import std.string : replace, toStringz, fromStringz;
@@ -437,6 +437,7 @@ public:
         auto compiler = compilerExecutable(repoRoot);
         string[] cmd = [compiler, "-shared", "-relocation-model=pic"];
         string[string] childEnv;
+        auto childConfig = Config.none;
         version (Windows)
         {
             // -shared normally implies -link-defaultlib-shared, which expects
@@ -466,6 +467,9 @@ public:
                 cmd ~= "-L/DEFAULTLIB:ucrtbase";
                 cmd ~= "-L/DEFAULTLIB:dcad-crt-legacy";
                 childEnv = environment.toAA();
+                // execute() merges a supplied env with the parent's unless
+                // Config.newEnv is set; without it these removals do nothing.
+                childConfig = Config.newEnv;
                 // A developer machine may have Visual Studio's LIB/INCLUDE
                 // exported. They would pull a second, static CRT into the
                 // plugin and clash with the bundled import libraries.
@@ -489,7 +493,7 @@ public:
 
         typeof(execute(cmd)) compiled;
         try
-            compiled = execute(cmd, childEnv);
+            compiled = execute(cmd, childEnv, childConfig);
         catch (ProcessException e)
             return RunResult(null, "cannot start ldc2: " ~ e.msg);
         catch (Exception e)
