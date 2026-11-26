@@ -73,10 +73,13 @@ the GUI from there, so a downloaded binary works from any working directory
 with no system OCCT/GLFW install. Pushing a tag also publishes those archives
 as a GitHub Release.
 
-The macOS archive contains `dcad.app`, so Finder opens the GUI directly instead
-of Terminal. The Windows launcher is built with the GUI subsystem and a WinMain
-entry point, so no console window appears; fatal errors use a message box. The
-Linux archive includes a `Terminal=false` desktop entry for the same behaviour.
+The macOS archive contains `dcad.app` with the real GUI and its resources inside
+`Contents/`, so Finder opens the application directly instead of Terminal. It is
+signed ad hoc; first-time downloads may still need right-click > Open. The
+Windows launcher is built with the GUI subsystem and a WinMain entry point, and
+starts the embedded GUI with `CREATE_NO_WINDOW`, so no console window appears;
+fatal errors use a message box. The Linux archive includes a `Terminal=false`
+desktop entry for the same behaviour.
 On Windows the
 CI downloads the official OCCT 7.9.3 `vc14-64` archive, its matching `3rdparty`
 archive (for `TKernel`'s jemalloc/TBB and the media/image dependencies reached

@@ -7,13 +7,14 @@
  * the user's data directory; the real GUI is then started from there, so it
  * never needs OCCT, GLFW or an asset directory installed on the host.
  *
- * The Windows build uses the GUI subsystem and a WinMain entry point, so
- * double-clicking it never allocates a console window. The POSIX build uses a
- * normal main because .app bundles and desktop launchers already suppress a
- * terminal.
+ * The Windows build uses the GUI subsystem and a WinMain entry point, and
+ * starts the inner GUI without a console window. Linux execs the inner GUI
+ * directly. macOS packages the real GUI inside dcad.app instead of this
+ * launcher, because LaunchServices kills an app that execs into the cache.
  */
 module launcher.main;
 
+import std.conv : to;
 import std.file : exists, copy, dirEntries, SpanMode, write;
 import std.path : baseName, buildPath;
 import std.stdio : stderr, writeln;
@@ -21,11 +22,13 @@ import std.string : toStringz;
 
 version (Posix)
     import std.process : execv;
+version (OSX)
+    import std.process : spawnProcess, wait;
 version (Windows)
 {
     import core.sys.windows.shellapi : CommandLineToArgvW;
     import core.sys.windows.winbase : GetCommandLineW, LocalFree;
-    import std.process : spawnProcess, wait;
+    import std.process : Config, spawnProcess, wait;
 }
 
 import launcher.embedded : prepareResources;
@@ -126,8 +129,30 @@ private int launch(string[] args)
 
     version (Windows)
     {
-        // The MSVC runtime has no execv, so wait for the GUI and return its
-        // exit code. The launcher stays alive only as its waiting parent.
+        // CREATE_NO_WINDOW stops the console-subsystem inner GUI from opening
+        // a terminal behind the GUI-subsystem launcher. Wait so exit codes and
+        // the launcher lifetime match the GUI's.
+        string[] childArgs = [inner] ~ args[1 .. $];
+        try
+        {
+            immutable status = wait(spawnProcess(childArgs,
+                                                 Config.suppressConsole));
+            if (status != 0)
+                reportError("embedded GUI exited with status "
+                            ~ status.to!string);
+            return status;
+        }
+        catch (Exception e)
+        {
+            reportError("failed to start " ~ inner ~ ": " ~ e.msg);
+            return 1;
+        }
+    }
+    else version (OSX)
+    {
+        // LaunchServices terminates an .app after it execs into the unsigned
+        // GUI in the cache. Keep the signed bundle executable alive as the
+        // parent; DYLD_LIBRARY_PATH is inherited by the child.
         string[] childArgs = [inner] ~ args[1 .. $];
         try
             return wait(spawnProcess(childArgs));

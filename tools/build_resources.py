@@ -46,6 +46,40 @@ def add_file(zf, path, name):
         zf.write(path, name)
 
 
+def copy_tree(source, target):
+    if not source.exists():
+        return
+    if target.exists():
+        shutil.rmtree(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(source, target, symlinks=True)
+
+
+def copy_file(source, target):
+    if not source.exists():
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, target)
+
+
+def stage_runtime_files(stage):
+    """Keep a plain copy of the payload for the macOS .app bundle.
+
+    LaunchServices terminates an app that execs into an unsigned binary in the
+    cache, so the macOS package puts the real GUI and its resources directly in
+    Contents/. The embedded ZIP still carries the same files for single-binary
+    development builds and for the other platforms.
+    """
+    copy_tree(ROOT / "gui" / "assets", stage / "assets")
+    copy_tree(ROOT / "samples", stage / "samples")
+    copy_tree(ROOT / "source", stage / "source")
+    copy_tree(ROOT / "gui" / "scripts", stage / "gui" / "scripts")
+    copy_tree(ROOT / "project-template", stage / "project-template")
+    copy_file(ROOT / "dcad-gui", stage / "dcad-gui")
+    copy_file(BUILD / "libdcad_shim.a", stage / "build" / "libdcad_shim.a")
+    copy_file(ROOT / "libdcad.a", stage / "libdcad.a")
+
+
 def macos_libraries(stage):
     """Stage and relocate Homebrew OCCT/GLFW dylibs for an rpath-based payload."""
     lib = stage / "lib"
@@ -235,6 +269,12 @@ def main():
                         "dcad=1\nlibs=" + ("1" if has_libs else "0") + "\n")
         else:
             zf.writestr("embedded.manifest", "dcad=0\nlibs=0\n")
+
+    # The macOS package needs the same files outside the ZIP (see
+    # stage_runtime_files). Do this after the ZIP is closed so they are not
+    # written twice and the launcher payload stays unchanged.
+    if embedded and MACOS:
+        stage_runtime_files(stage)
 
     if WINDOWS:
         rc = BUILD / "dcad_resources.rc"

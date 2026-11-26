@@ -58,6 +58,14 @@ string resourceRoot()
 {
     auto exeDir = dirName(thisExePath());
     if (hasGuiAssets(exeDir)) return exeDir;
+    version (OSX)
+    {
+        // A packaged .app keeps its resources one level above MacOS/. This is
+        // the real GUI binary, not the self-extracting launcher, so no cache
+        // directory or environment variable is needed.
+        auto bundled = buildPath(exeDir, "..", "Resources");
+        if (hasGuiAssets(bundled)) return bundled;
+    }
     auto cwd = getcwd();
     if (hasGuiAssets(cwd)) return cwd;
     return exeDir;

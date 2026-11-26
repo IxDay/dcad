@@ -411,7 +411,10 @@ public:
             if (exists(srcPath)) remove(srcPath);
             if (modSrcPath.length && exists(modSrcPath)) remove(modSrcPath);
             if (exists(objPath)) remove(objPath);
-            if (!lib.loaded && exists(dylibPath)) remove(dylibPath);
+            // Keep a failed plugin too when debugging script loading.
+            if (!lib.loaded && exists(dylibPath) &&
+                "DCAD_KEEP_SCRIPTS" !in environment)
+                remove(dylibPath);
         }
 
         string[] cmd = ["ldc2", "-shared", "-relocation-model=pic"];

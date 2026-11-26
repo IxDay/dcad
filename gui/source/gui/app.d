@@ -15,6 +15,7 @@ import std.string : toStringz, format, startsWith, endsWith;
 import std.algorithm.sorting : sort;
 import std.array : array;
 import std.conv : to;
+import std.process : environment;
 
 import gui.agent : AgentBridge, AgentRole;
 import gui.platform : processId, nativeHandles, resourceRoot;
@@ -167,6 +168,15 @@ void main(string[] args)
     // the repository root is found instead, so `dub run :gui` keeps working.
     immutable root = resourceRoot();
     dcad_gui_set_resource_root(root.toStringz);
+
+    // Headless acceptance hook: proves the packaged launcher actually started
+    // the embedded GUI before any GLFW/window work is attempted.
+    immutable smokeFile = environment.get("DCAD_SMOKE_FILE", "");
+    if (smokeFile.length)
+    {
+        write(smokeFile, root);
+        return;
+    }
 
     // Project handler: `dcad-gui <project-dir|.dcad.toml|source.d>` opens a
     // project, while `--new-project <target-dir>` scaffolds the daimochi

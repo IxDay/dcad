@@ -12,12 +12,13 @@ brew install glfw                     # one-time, macOS
 dub run :gui
 ```
 
-A released binary needs no such install: `dcad-gui` is a self-extracting
-launcher. It expands its embedded GUI, icons, fonts, D sources, static libraries,
+A released binary needs no such install. Windows and Linux use a self-extracting
+launcher that expands the embedded GUI, icons, fonts, D sources, static libraries,
 project template and OCCT/GLFW libraries into a versioned cache under the user's
-data directory, then starts the GUI from there. macOS ships it inside `dcad.app`
-so Finder does not open Terminal; the Windows launcher uses the GUI subsystem so
-no console window appears; Linux includes a `Terminal=false` desktop entry.
+data directory. The macOS `dcad.app` instead places the real GUI and the same
+resources in `Contents/`, because LaunchServices terminates an app that execs
+into an unsigned cache binary. The Windows launcher uses the GUI subsystem and
+suppresses the child console; Linux includes a `Terminal=false` desktop entry.
 
 The window opens the real tracked file `samples/coffee-table/table.d` and
 renders it in your VS Code **Base16 Default Light** palette (`#f8f8f8` editor, `#f9f9f9` sidebar,

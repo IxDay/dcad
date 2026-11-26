@@ -61,6 +61,12 @@ def copy_launcher(source, target):
 
 
 def package_macos(target_dir, launcher, version):
+    """Build the .app around the real GUI, not the self-extracting launcher.
+
+    LaunchServices kills an app that execs (or spawns) into the unsigned GUI in
+    the runtime cache. Putting the GUI and its resources in the bundle keeps a
+    single signed process, so Finder opens the application directly.
+    """
     app = target_dir / "dcad.app"
     contents = app / "Contents"
     macos = contents / "MacOS"
@@ -68,7 +74,23 @@ def package_macos(target_dir, launcher, version):
     for path in (macos, resources):
         path.mkdir(parents=True, exist_ok=True)
 
-    copy_launcher(launcher, macos / "dcad-gui")
+    stage = ROOT / "build" / "resource-stage"
+    gui = stage / "dcad-gui"
+    if not gui.exists():
+        raise SystemExit("staged macOS GUI not found: " + str(gui))
+    copy_launcher(gui, macos / "dcad-gui")
+
+    # Everything the GUI, a hot-loaded module or a New Project needs lives in
+    # Contents/Resources, hidden from the sidebar and from Finder's app view.
+    for item in sorted(stage.iterdir()):
+        if item.name == "dcad-gui":
+            continue
+        target = resources / item.name
+        if item.is_dir():
+            shutil.copytree(item, target, dirs_exist_ok=True)
+        else:
+            shutil.copy2(item, target)
+
     (contents / "Info.plist").write_text(
         PLIST.format(version=html.escape(version)), encoding="utf-8")
 
@@ -76,8 +98,19 @@ def package_macos(target_dir, launcher, version):
     # Gatekeeper may still ask first-time users to right-click and Open.
     codesign = shutil.which("codesign")
     if codesign:
+        quiet = dict(check=False, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL)
         subprocess.run([codesign, "--force", "--deep", "--sign", "-", str(app)],
-                       check=False)
+                       **quiet)
+        # codesign --deep leaves the relocated dylibs with a signature dyld
+        # rejects when a script plugin dlopens them (SIGKILL, "Invalid Page").
+        # Signing each Mach-O individually first fixes that; then seal the app
+        # without --deep so the nested signatures stay intact.
+        for macho in [macos / "dcad-gui"] + sorted(
+                (resources / "lib").glob("*.dylib")):
+            subprocess.run([codesign, "--force", "--sign", "-", str(macho)],
+                           **quiet)
+        subprocess.run([codesign, "--force", "--sign", "-", str(app)], **quiet)
     return macos / "dcad-gui"
 
 

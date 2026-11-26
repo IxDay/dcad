@@ -60,7 +60,25 @@ if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
     test -f "$ROOT/samples/coffee-table/table.d"
     test -d "$ROOT/samples/coffee-table"
     test -d "$ROOT/source"
-    echo "PASS: embedded launcher payload and project template"
+
+    # Start the embedded GUI once without creating a window. This catches a
+    # launcher that cannot spawn its child even when --print-root succeeds.
+    SMOKE_FILE="$PWD/build/gui-smoke.txt"
+    rm -f "$SMOKE_FILE"
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            DCAD_SMOKE_FILE="$SMOKE_FILE" ./dcad-launcher.exe >/dev/null 2>&1
+            ;;
+        *)
+            DCAD_SMOKE_FILE="$SMOKE_FILE" ./dcad-launcher >/dev/null 2>&1
+            ;;
+    esac
+    test -f "$SMOKE_FILE" || {
+        echo "embedded GUI did not start" >&2
+        exit 1
+    }
+
+    echo "PASS: embedded launcher payload, project template and GUI startup"
 fi
 
 echo "PASS: bindings, examples, 18-part coffee table, GUI, script forms and new project"

@@ -136,8 +136,9 @@ jobs:
           ldc2 --version
           bash tests/run.sh
 
-      # macOS gets a .app bundle (no Terminal); Windows uses a GUI-subsystem
-      # launcher (no console); Linux gets a Terminal=false desktop entry.
+      # macOS gets a .app with the real GUI (no Terminal, no child process);
+      # Windows uses a GUI-subsystem launcher with no child console; Linux gets
+      # a Terminal=false desktop entry.
       - name: Package target
         env:
           DCAD_VERSION: ${{ github.ref_name }}
