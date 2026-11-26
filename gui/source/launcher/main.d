@@ -135,7 +135,7 @@ private int launch(string[] args)
         string[] childArgs = [inner] ~ args[1 .. $];
         try
         {
-            immutable status = wait(spawnProcess(childArgs,
+            immutable status = wait(spawnProcess(childArgs, null,
                                                  Config.suppressConsole));
             if (status != 0)
                 reportError("embedded GUI exited with status "
