@@ -64,30 +64,31 @@ include locations; set `CXX=g++` on Linux if `clang++` is not installed, or
 
 `.github/workflows/build.yml` builds and runs `tests/run.sh` on every target in
 release mode (`DCAD_BUILD_TYPE=release`; local runs default to dub's debug
-build) and publishes a single self-extracting binary per target: `dcad-linux-x86_64`,
-`dcad-linux-aarch64`, `dcad-macos-x86_64`, `dcad-macos-arm64` and
-`dcad-windows-x86_64.exe`. There is no tarball and no bundled README. Each
-binary contains the real GUI, icons, fonts, sample scripts, the D source/import
-libraries needed by hot reload, the new-project template and (where available)
-OCCT/GLFW libraries. On first launch it expands them into a versioned cache
-under the user's data directory, so a downloaded binary works from any working
-directory with no system OCCT/GLFW install. On Linux and macOS, mark the
-download executable after saving it (`chmod +x dcad-<target>`). Pushing a tag
-publishes those binaries as a GitHub Release. While the GUI is still being
-validated, the release tag is the rolling `0.1.0` marker: each update deletes
-the previous release and force-pushes `0.1.0` to the validated commit instead
-of creating a new version.
+build) and publishes one asset per target: `dcad-linux-x86_64`,
+`dcad-linux-aarch64`, `dcad-macos-x86_64.app.zip`, `dcad-macos-arm64.app.zip`
+and `dcad-windows-x86_64.exe`. There is no tarball and no bundled README. Linux
+and Windows assets are self-extracting binaries containing the real GUI, icons,
+fonts, sample scripts, the D source/import libraries needed by hot reload, the
+new-project template and (where available) OCCT/GLFW libraries. On first launch
+they expand them into a versioned cache under the user's data directory, so a
+downloaded binary works from any working directory with no system OCCT/GLFW
+install. On Linux, mark the download executable after saving it
+(`chmod +x dcad-<target>`). Pushing a tag publishes those assets as a GitHub
+Release. While the GUI is still being validated, the release tag is the rolling
+`0.1.0` marker: each update deletes the previous release and force-pushes
+`0.1.0` to the validated commit instead of creating a new version.
 
-The macOS binary is ad-hoc signed; unsigned arm64 code will not run on Apple
-Silicon even without quarantine. A free Apple account cannot issue a Developer
-ID certificate or notarize the binary, so Gatekeeper still warns on first
-launch. On macOS Sequoia, open the binary once, then go to System Settings →
-Privacy & Security and click **Open Anyway**. If that still refuses, remove the
-download's quarantine attribute in Terminal:
-`xattr -dr com.apple.quarantine /path/to/dcad-<target>`. The Windows binary is
-built with the GUI subsystem and a WinMain entry point, and starts the embedded
-GUI with `CREATE_NO_WINDOW`, so no console window appears; its diagnostics go
-to `gui.log` in the extracted cache and fatal errors use a message box.
+The macOS asset is a zip containing a signed `dcad.app`; unzip it and open the
+app from Finder. Every Mach-O in the bundle is ad-hoc signed; unsigned arm64
+code will not run on Apple Silicon even without quarantine. A free Apple
+account cannot issue a Developer ID certificate or notarize the app, so
+Gatekeeper still warns on first launch. On macOS Sequoia, open the app once,
+then go to System Settings → Privacy & Security and click **Open Anyway**. If
+that still refuses, remove the download's quarantine attribute in Terminal:
+`xattr -dr com.apple.quarantine /path/to/dcad.app`. The Windows binary is built
+with the GUI subsystem and a WinMain entry point, and starts the embedded GUI
+with `CREATE_NO_WINDOW`, so no console window appears; its diagnostics go to
+`gui.log` in the extracted cache and fatal errors use a message box.
 
 The Windows binary also embeds a private LDC toolchain, a portable COFF
 linker, and the matching static MSVC CRT/Win32 import libraries, so hot reload

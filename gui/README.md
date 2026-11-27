@@ -12,14 +12,16 @@ brew install glfw                     # one-time, macOS
 dub run :gui
 ```
 
-A released binary needs no such install. Every target ships one self-extracting
-launcher that expands the embedded GUI, icons, fonts, D sources, static libraries,
-project template and OCCT/GLFW libraries into a versioned cache under the user's
-data directory. The macOS binary is ad-hoc signed, since unsigned arm64 code will
-not run on Apple Silicon. The Windows launcher uses the GUI subsystem and
-suppresses the child console; it redirects the GUI's stdout/stderr to `gui.log`
-next to the extracted binary and reports startup failures in a message box.
-Setup and Gatekeeper instructions are in the release notes and the root README.
+A released binary needs no such install. Linux and Windows ship one
+self-extracting launcher that expands the embedded GUI, icons, fonts, D sources,
+static libraries, project template and OCCT/GLFW libraries into a versioned
+cache under the user's data directory. macOS ships `dcad.app` in a zip instead,
+because Finder cannot open a bare Unix executable as an app; every Mach-O in the
+bundle is ad-hoc signed, since unsigned arm64 code will not run on Apple
+Silicon. The Windows launcher uses the GUI subsystem and suppresses the child
+console; it redirects the GUI's stdout/stderr to `gui.log` next to the extracted
+binary and reports startup failures in a message box. Setup and Gatekeeper
+instructions are in the release notes and the root README.
 
 The Windows release embeds a private LDC compiler, its D imports/libraries, a
 portable `lld-link`, and the static MSVC CRT/Win32 import libraries used by the
