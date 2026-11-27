@@ -495,13 +495,15 @@ public:
             if (fallback.ok())
             {
                 auto retried = loadPlugin(fallback.path, fallback.owned);
-                if (!retried.ok() && fallback.owned && exists(fallback.path))
+                if (!retried.ok() && fallback.owned && exists(fallback.path) &&
+                    "DCAD_KEEP_SCRIPTS" !in environment)
                     remove(fallback.path);
                 return retried;
             }
             return RunResult(null, fallback.error);
         }
-        if (!result.ok() && prepared.owned && exists(prepared.path))
+        if (!result.ok() && prepared.owned && exists(prepared.path) &&
+            "DCAD_KEEP_SCRIPTS" !in environment)
             remove(prepared.path);
         return result;
     }
@@ -557,11 +559,17 @@ public:
                 write(buildPath(workDir, "last-module.d"),
                       asModule(source, modName));
         }
+        bool compiledOk;
         scope(exit)
         {
             if (exists(srcPath)) remove(srcPath);
             if (modSrcPath.length && exists(modSrcPath)) remove(modSrcPath);
             if (exists(objPath)) remove(objPath);
+            // Keep failed binaries when debugging, as the old single-call
+            // flow did. A successful plugin stays for runPrepared() to load.
+            if (!compiledOk && "DCAD_KEEP_SCRIPTS" !in environment &&
+                exists(dylibPath))
+                remove(dylibPath);
         }
 
         auto compiler = compilerExecutable(repoRoot);
@@ -651,11 +659,10 @@ public:
         if (compiled.status != 0)
         {
             string msg = compiled.output.length ? compiled.output : "ldc2 failed";
-            if (exists(dylibPath) && "DCAD_KEEP_SCRIPTS" !in environment)
-                remove(dylibPath);
             return PreparedPlugin(null, false, msg);
         }
 
+        compiledOk = true;
         return PreparedPlugin(dylibPath, true, null);
     }
 

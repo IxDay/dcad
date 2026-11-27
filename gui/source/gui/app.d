@@ -804,6 +804,10 @@ void main(string[] args)
             if (glfwWindowShouldClose(window))
                 break;
 
+            // Only the modal is drawn in this nested loop, so paint a stable
+            // backdrop instead of relying on undefined swapped-buffer contents.
+            glClearColor(0.97f, 0.97f, 0.97f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT);
             dcad_gui_new_frame();
             float vw, vh;
             dcad_gui_get_viewport_size(&vw, &vh);
