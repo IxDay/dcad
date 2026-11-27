@@ -215,6 +215,21 @@ private void extract(const(ubyte)[] bytes, string root, string tag)
     }
     write(buildPath(staging, "resource-version.txt"), tag);
 
+    version (Posix)
+    {
+        // std.zip writes plain data files; restore the bits needed to execute
+        // the GUI and the private compiler. This happens before the root is
+        // published, so `--print-root` also sees a complete cache.
+        import core.sys.posix.sys.stat : chmod;
+        import std.conv : octal;
+
+        foreach (name; ["dcad-gui", "toolchain/bin/ldc2"])
+        {
+            auto path = buildPath(staging, name);
+            if (exists(path)) chmod(path.toStringz, octal!755);
+        }
+    }
+
     if (exists(root)) rmdirRecurse(root);
     rename(staging, root);
 }

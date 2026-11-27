@@ -45,6 +45,7 @@ jobs:
           curl -fsSL "https://github.com/ldc-developers/ldc/releases/download/v1.43.0/${{ matrix.ldc }}" \
             | tar -xJ -C "$RUNNER_TEMP/ldc" --strip-components=1
           echo "$RUNNER_TEMP/ldc/bin" >> "$GITHUB_PATH"
+          echo "DCAD_LDC_ROOT=$RUNNER_TEMP/ldc" >> "$GITHUB_ENV"
           "$RUNNER_TEMP/ldc/bin/ldc2" --version
 
       - name: Install LDC and MSVC environment (Windows x86-64)
@@ -207,8 +208,9 @@ jobs:
           private compiler/toolchain into a versioned cache.
 
           macOS assets are `dcad-macos-*.app.zip`. Unzip the download to get
-          `dcad.app`, then open it from Finder. The bundle is ad-hoc signed. A
-          free Apple account cannot issue a Developer ID certificate or notarize
+          `dcad.app`, then open it from Finder. The app includes its own D
+          compiler, so `ldc2` is not needed on PATH. The bundle is ad-hoc signed.
+          A free Apple account cannot issue a Developer ID certificate or notarize
           the app, so Gatekeeper still warns on first launch. Open the app once,
           then go to System Settings → Privacy & Security and click **Open
           Anyway**. If that still refuses, remove the download's quarantine

@@ -97,6 +97,13 @@ if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
             ;;
         *)
             SMOKE_BIN=./dcad-script-host-smoke
+            if [ "$(uname -s)" = Darwin ]; then
+                test -x "$ROOT/toolchain/bin/ldc2"
+                test -f "$ROOT/toolchain/etc/ldc2.conf/30-compiler.conf"
+                test -f "$ROOT/toolchain/import/object.d"
+                test -f "$ROOT/toolchain/lib/libphobos2-ldc.a"
+                test -f "$ROOT/toolchain/lib/libdruntime-ldc.a"
+            fi
             ;;
     esac
 

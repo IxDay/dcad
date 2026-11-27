@@ -90,9 +90,10 @@ with the GUI subsystem and a WinMain entry point, and starts the embedded GUI
 with `CREATE_NO_WINDOW`, so no console window appears; its diagnostics go to
 `gui.log` in the extracted cache and fatal errors use a message box.
 
-The Windows binary also embeds a private LDC toolchain, a portable COFF
-linker, and the matching static MSVC CRT/Win32 import libraries, so hot reload
-works without installing D, LDC or Visual Studio. Source
+The Windows binary and macOS app also embed a private LDC toolchain. Windows
+adds a portable COFF linker and the matching static MSVC CRT/Win32 import
+libraries, so hot reload works without installing D, LDC or Visual Studio;
+macOS uses its private compiler with the system linker. Source
 checkouts still use the `ldc2` on `PATH`; a missing compiler is reported in the
 editor rather than exiting the application. The interface follows the display's
 HiDPI scale automatically; set `DCAD_UI_SCALE` to override it (for example,

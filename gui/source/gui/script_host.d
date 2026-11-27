@@ -338,15 +338,20 @@ private string asModule(string source, string modName)
 /**
  * Compiler used for hot reload.
  *
- * Released Windows archives carry a private LDC toolchain in the cache root,
- * so editing works on a machine with no system D compiler. Source checkouts
- * continue to use whatever `ldc2` is on PATH.
+ * Released Windows binaries and macOS apps carry a private LDC toolchain in
+ * their resource root, so editing works on a machine with no system D compiler.
+ * Source checkouts continue to use whatever `ldc2` is on PATH.
  */
 private string compilerExecutable(string repoRoot)
 {
     version (Windows)
     {
         immutable bundled = buildPath(repoRoot, "toolchain", "bin", "ldc2.exe");
+        if (exists(bundled)) return bundled;
+    }
+    else version (OSX)
+    {
+        immutable bundled = buildPath(repoRoot, "toolchain", "bin", "ldc2");
         if (exists(bundled)) return bundled;
     }
     return "ldc2";
@@ -576,6 +581,13 @@ public:
                 childEnv["PATH"] = toolBin ~ ";" ~
                                    childEnv.get("PATH", "");
             }
+        }
+        else version (OSX)
+        {
+            // `-shared` otherwise asks macOS LDC to link the shared D runtime,
+            // which is not part of the private toolchain. Static
+            // druntime/Phobos keeps released plugins self-contained.
+            cmd ~= "-link-defaultlib-shared=false";
         }
         cmd ~= ["-I", buildPath(repoRoot, "source")];
         foreach (p; importPaths)

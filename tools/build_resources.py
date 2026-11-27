@@ -429,6 +429,133 @@ def windows_toolchain(stage):
     return (tool / "bin" / "ldc2.exe").is_file()
 
 
+def macos_ldc_root():
+    """Locate the native LDC distribution used for this build."""
+    roots = []
+    env_root = os.environ.get("DCAD_LDC_ROOT")
+    if env_root:
+        roots.append(Path(env_root))
+    installed = shutil.which("ldc2")
+    if installed:
+        resolved = Path(installed).resolve()
+        roots.extend([resolved.parent.parent, resolved.parent])
+    roots += [Path("/opt/homebrew/opt/ldc"), Path("/usr/local/opt/ldc")]
+    for root in roots:
+        if (root / "bin" / "ldc2").is_file():
+            return root
+    return None
+
+
+def macho_rpaths(path):
+    output = subprocess.run(["otool", "-l", str(path)], check=True,
+                           capture_output=True, text=True).stdout
+    paths = set()
+    for line in output.splitlines():
+        parts = line.strip().split()
+        if len(parts) >= 2 and parts[0] == "path":
+            paths.add(parts[1])
+    return paths
+
+
+def macho_dependencies(path):
+    output = subprocess.run(["otool", "-L", str(path)], check=True,
+                           capture_output=True, text=True).stdout
+    deps = []
+    for line in output.splitlines()[1:]:
+        dep = line.strip().split()[0]
+        if dep.startswith("@") or dep.startswith("/usr/lib/") or \
+                dep.startswith("/System/"):
+            continue
+        if Path(dep).is_file():
+            deps.append(Path(dep))
+    return deps
+
+
+def relocate_macho(path, lib):
+    """Rewrite non-system dylib loads into the bundle's private lib/."""
+    rpath = "@executable_path/../lib" if path.parent.name == "bin" \
+        else "@loader_path"
+    if rpath not in macho_rpaths(path):
+        subprocess.run(["install_name_tool", "-add_rpath", rpath, str(path)],
+                       check=True)
+    for dep in macho_dependencies(path):
+        target = lib / dep.name
+        if not target.exists():
+            copy_file(dep.resolve(), target)
+            relocate_macho(target, lib)
+        new = "@rpath/" + dep.name
+        if str(dep) != new:
+            subprocess.run(["install_name_tool", "-change", str(dep), new,
+                            str(path)], check=True)
+
+
+def is_macho(path):
+    try:
+        with path.open("rb") as stream:
+            return stream.read(4) in (
+                b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xcf",
+                b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xce",
+                b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca",
+            )
+    except OSError:
+        return False
+
+
+def macos_toolchain(stage):
+    """Bundle a private LDC so a released app can compile user scripts."""
+    root = macos_ldc_root()
+    if root is None:
+        return False
+    tool = stage / "toolchain"
+    copy_file(root / "bin" / "ldc2", tool / "bin" / "ldc2")
+    if not (tool / "bin" / "ldc2").is_file():
+        return False
+
+    conf = tool / "etc" / "ldc2.conf"
+    copy_tree(root / "etc" / "ldc2.conf", conf)
+    # Homebrew's config contains an absolute include path; make the bundled
+    # compiler relocatable like the official LDC tarball.
+    conf.mkdir(parents=True, exist_ok=True)
+    (conf / "30-compiler.conf").write_text(
+        '"default":\n'
+        '{\n'
+        '    switches ~= [\n'
+        '        "-defaultlib=phobos2-ldc,druntime-ldc",\n'
+        '    ];\n'
+        '    post-switches ~= [\n'
+        '        "-I%%ldcbinarypath%%/../import",\n'
+        '    ];\n'
+        '};\n', encoding="utf-8")
+
+    imports = root / "import"
+    if not imports.is_dir():
+        imports = root / "include" / "dlang" / "ldc"
+    copy_tree(imports, tool / "import")
+
+    # Only the static runtime libraries the default config links are needed;
+    # debug, LTO and sanitizer variants would inflate the app for no benefit.
+    lib = tool / "lib"
+    for name in ("libphobos2-ldc.a", "libdruntime-ldc.a",
+                 "libldc_rt.builtins.a", "ldc_rt.dso.o"):
+        copy_file(root / "lib" / name, lib / name)
+
+    # The official macOS LDC binary only loads system libraries. Homebrew's
+    # build also loads LLVM dylibs from its own prefix, so bring those along.
+    relocate_macho(tool / "bin" / "ldc2", lib)
+    codesign = shutil.which("codesign")
+    if codesign:
+        for path in sorted(tool.rglob("*")):
+            if path.is_file() and is_macho(path):
+                subprocess.run([codesign, "--force", "--sign", "-", str(path)],
+                               check=True, stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL)
+
+    licenses = tool / "licenses"
+    for name in ["LICENSE", "LICENSE.txt", "LICENSE.md", "COPYING"]:
+        copy_file(root / name, licenses / name)
+    return (tool / "bin" / "ldc2").is_file()
+
+
 def main():
     BUILD.mkdir(parents=True, exist_ok=True)
     embedded = os.environ.get("DCAD_EMBED_RESOURCES") == "1"
@@ -481,8 +608,11 @@ def main():
                 has_libs = windows_libraries(stage)
                 print("  STAGE private D toolchain", flush=True)
                 has_compiler = windows_toolchain(stage)
-            elif MACOS and os.environ.get("DCAD_EMBED_SYSTEM_LIBS") != "0":
-                has_libs = macos_libraries(stage)
+            elif MACOS:
+                if os.environ.get("DCAD_EMBED_SYSTEM_LIBS") != "0":
+                    has_libs = macos_libraries(stage)
+                print("  STAGE private D toolchain", flush=True)
+                has_compiler = macos_toolchain(stage)
             elif os.environ.get("DCAD_EMBED_SYSTEM_LIBS") != "0":
                 has_libs = linux_libraries(stage)
             print("  STAGE platform libraries done", flush=True)

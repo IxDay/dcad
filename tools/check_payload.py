@@ -61,6 +61,19 @@ def main():
             missing = [name for name in required if name not in names]
             if missing:
                 raise SystemExit("missing toolchain file: " + missing[0])
+        elif sys.platform == "darwin":
+            if "compiler=1\n" not in manifest:
+                raise SystemExit("macOS payload has no private D toolchain")
+            required = [
+                "toolchain/bin/ldc2",
+                "toolchain/etc/ldc2.conf/30-compiler.conf",
+                "toolchain/import/object.d",
+                "toolchain/lib/libphobos2-ldc.a",
+                "toolchain/lib/libdruntime-ldc.a",
+            ]
+            missing = [name for name in required if name not in names]
+            if missing:
+                raise SystemExit("missing toolchain file: " + missing[0])
     print("PASS: launcher payload layout")
 
 

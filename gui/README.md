@@ -25,9 +25,10 @@ instructions are in the release notes and the root README.
 
 The Windows release embeds a private LDC compiler, its D imports/libraries, a
 portable `lld-link`, and the static MSVC CRT/Win32 import libraries used by the
-C++ shims, so hot reload works with no compiler install and without Visual
-Studio. A source checkout uses the `ldc2` on `PATH`; if it is missing the
-error is shown in the editor instead of terminating the GUI.
+C++ shims. The macOS app embeds the same private compiler and D libraries and
+uses the system linker. Neither release needs a host D install. A source
+checkout uses the `ldc2` on `PATH`; if it is missing the error is shown in the
+editor instead of terminating the GUI.
 
 The interface follows the monitor's HiDPI scale: fonts, spacing, panes and icon
 sizes all multiply by the framebuffer/window ratio. Set `DCAD_UI_SCALE` (for
