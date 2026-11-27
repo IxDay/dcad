@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from make_crt_lib import build as build_crt_lib
+from relocate_macos import strip_development_rpaths
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / "build"
@@ -27,7 +28,7 @@ WINDOWS = sys.platform == "win32"
 MACOS = sys.platform == "darwin"
 
 
-def add_tree(zf, source, prefix):
+def add_tree(zf, source, prefix, written=None):
     """Store files from a directory tree under `prefix`.
 
     Dotfiles are included: `.dcad.toml` is the project-root marker. Hidden
@@ -41,12 +42,22 @@ def add_tree(zf, source, prefix):
         parts = path.relative_to(source).parts
         if any(p.startswith(".") for p in parts[:-1]):
             continue
-        zf.write(path, prefix + "/" + "/".join(parts))
-
-
-def add_file(zf, path, name):
-    if Path(path).exists():
+        name = prefix + "/" + "/".join(parts)
+        if written is not None:
+            if name in written:
+                continue
+            written.add(name)
         zf.write(path, name)
+
+
+def add_file(zf, path, name, written=None):
+    if not Path(path).exists():
+        return
+    if written is not None:
+        if name in written:
+            return
+        written.add(name)
+    zf.write(path, name)
 
 
 def copy_tree(source, target, skip=()):
@@ -66,7 +77,24 @@ def copy_file(source, target):
     shutil.copy2(source, target)
 
 
-def stage_runtime_files(stage):
+def release_gui_binary():
+    """Return the GUI copy used by shipped payloads.
+
+    The checkout binary keeps Homebrew rpaths for `dub run :gui`. Release
+    payloads use a sanitized copy that can only resolve the private bundled
+    dylibs, so the package stays self-contained and cannot mix OCCT copies.
+    """
+    source = ROOT / ("dcad-gui.exe" if WINDOWS else "dcad-gui")
+    if not MACOS:
+        return source
+    target = BUILD / "dcad-gui-release"
+    shutil.copy2(source, target)
+    os.chmod(target, 0o755)
+    strip_development_rpaths(target)
+    return target
+
+
+def stage_runtime_files(stage, gui_binary):
     """Keep a plain copy of the payload for the macOS .app bundle.
 
     LaunchServices terminates an app that execs into an unsigned binary in the
@@ -79,11 +107,22 @@ def stage_runtime_files(stage):
     copy_tree(ROOT / "source", stage / "source")
     copy_tree(ROOT / "gui" / "scripts", stage / "gui" / "scripts")
     copy_tree(ROOT / "project-template", stage / "project-template")
-    copy_file(ROOT / "dcad-gui", stage / "dcad-gui")
+    copy_file(gui_binary, stage / "dcad-gui")
     copy_file(BUILD / "libdcad_shim.a", stage / "build" / "libdcad_shim.a")
     copy_file(ROOT / "libdcad.a", stage / "libdcad.a")
     for path, name in plugin_files():
         copy_file(path, stage / name)
+
+
+def stage_plugin_inputs(stage):
+    """Give build-time plugin compilation the same SDK the payload ships.
+
+    The macOS plugin root is the staged payload rather than the source checkout,
+    so the linker must find the copied D sources and static shims there too.
+    """
+    copy_tree(ROOT / "source", stage / "source")
+    copy_file(BUILD / "libdcad_shim.a", stage / "build" / "libdcad_shim.a")
+    copy_file(ROOT / "libdcad.a", stage / "libdcad.a")
 
 
 def macos_libraries(stage):
@@ -95,6 +134,16 @@ def macos_libraries(stage):
         "/usr/local/opt/opencascade/lib/libTK*.dylib",
         "/opt/homebrew/opt/glfw/lib/libglfw*.dylib",
         "/usr/local/opt/glfw/lib/libglfw*.dylib",
+        "/opt/homebrew/opt/tbb/lib/libtbb*.dylib",
+        "/usr/local/opt/tbb/lib/libtbb*.dylib",
+        "/opt/homebrew/opt/freetype/lib/libfreetype*.dylib",
+        "/usr/local/opt/freetype/lib/libfreetype*.dylib",
+        "/opt/homebrew/opt/brotli/lib/libbrotli*.dylib",
+        "/usr/local/opt/brotli/lib/libbrotli*.dylib",
+        "/opt/homebrew/opt/libpng/lib/libpng*.dylib",
+        "/usr/local/opt/libpng/lib/libpng*.dylib",
+        "/opt/homebrew/opt/hwloc/lib/libhwloc*.dylib",
+        "/usr/local/opt/hwloc/lib/libhwloc*.dylib",
     ]
     copied = []
     # Homebrew installs versioned dylibs plus compatibility symlinks such as
@@ -122,7 +171,9 @@ def macos_libraries(stage):
                                 capture_output=True, text=True).stdout
         for line in output.splitlines()[1:]:
             old = line.strip().split()[0]
-            if "opencascade" not in old and "glfw" not in old and "/lib/libTK" not in old:
+            if not any(marker in old for marker in (
+                    "opencascade", "glfw", "tbb", "freetype", "brotli",
+                    "libpng", "hwloc", "/lib/libTK")):
                 continue
             replacement = "@rpath/" + Path(old).name
             if old != replacement:
@@ -141,6 +192,13 @@ def macos_libraries(stage):
         for name in names:
             if name != path.name:
                 shutil.copy2(path, lib / name)
+
+    # Compatibility aliases are real copies rather than symlinks. Give each one
+    # its own install name; otherwise dyld resolves an alias request and then
+    # loads the versioned file too, creating two independent OCCT statics.
+    for path in sorted(lib.glob("*.dylib")):
+        subprocess.run(["install_name_tool", "-id", "@rpath/" + path.name,
+                        str(path)], check=True)
 
     # install_name_tool invalidates the Homebrew signatures. A plugin loaded
     # with dlopen resolves these staged dylibs through @rpath and dyld kills
@@ -287,6 +345,17 @@ def macos_finalize_plugin(path):
     for old, new in changes:
         subprocess.run(["install_name_tool", "-change", old, new, str(path)],
                        check=True)
+    # A plugin that resolves OCCT through Homebrew while the host uses the
+    # bundled copies meshes shapes across two independent OCCT states.
+    for rpath in macho_rpaths(path):
+        if (rpath.startswith("/opt/homebrew") or
+                rpath.startswith("/usr/local") or
+                "resource-stage" in rpath):
+            subprocess.run(["install_name_tool", "-delete_rpath", rpath,
+                            str(path)], check=False)
+    if "@loader_path/lib" not in macho_rpaths(path):
+        subprocess.run(["install_name_tool", "-add_rpath", "@loader_path/lib",
+                        str(path)], check=True)
     subprocess.run(["install_name_tool", "-id", "@rpath/" + path.name,
                     str(path)], check=True)
     if shutil.which("codesign"):
@@ -294,7 +363,7 @@ def macos_finalize_plugin(path):
                        check=True)
 
 
-def precompile_plugins():
+def precompile_plugins(repo_root=None):
     """Compile the bundled projects once at build time using the script host."""
     smoke = ROOT / ("dcad-script-host-smoke.exe" if WINDOWS
                     else "dcad-script-host-smoke")
@@ -304,12 +373,38 @@ def precompile_plugins():
         return
     env = os.environ.copy()
     env["DCAD_PLUGIN_EMIT"] = "1"
+    if repo_root is not None:
+        # Use the staged runtime as the plugin's resource root so macOS links
+        # against the bundled OCCT instead of falling back to Homebrew.
+        env["DCAD_SCRIPT_HOST_ROOT"] = str(repo_root)
     for base, project_dir, entry in PRECOMPILED_PLUGINS:
         subprocess.run([
             str(smoke), "--emit-plugin", str(BUILD / base),
             str(project_dir), entry,
         ], check=True, env=env)
         macos_finalize_plugin(BUILD / (base + plugin_extension()))
+    verify_plugin_keys(repo_root)
+
+
+def verify_plugin_keys(repo_root=None):
+    """Fail the build if an emitted plugin key no longer matches its source."""
+    smoke = ROOT / ("dcad-script-host-smoke.exe" if WINDOWS
+                    else "dcad-script-host-smoke")
+    if not smoke.is_file():
+        return
+    env = os.environ.copy()
+    if repo_root is not None:
+        env["DCAD_SCRIPT_HOST_ROOT"] = str(repo_root)
+    for base, project_dir, entry in PRECOMPILED_PLUGINS:
+        expected = subprocess.run([
+            str(smoke), "--plugin-key", str(project_dir), entry,
+        ], check=True, capture_output=True, text=True, env=env).stdout.strip()
+        key = BUILD / (base + ".key")
+        actual = key.read_text().strip() if key.is_file() else ""
+        if actual != expected:
+            raise SystemExit(
+                "stale precompiled plugin key for {}: {} != {}".format(
+                    base, actual, expected))
 
 
 MSVC_LINK_LIBS = [
@@ -564,13 +659,22 @@ def main():
         shutil.rmtree(stage)
     stage.mkdir(parents=True)
 
-    if embedded:
-        print("  PRECOMPILE bundled scripts", flush=True)
-        precompile_plugins()
-        print("  PRECOMPILE bundled scripts done", flush=True)
-
     has_libs = False
     has_compiler = False
+    gui_exe = None
+    if embedded:
+        gui_exe = release_gui_binary()
+        if MACOS and os.environ.get("DCAD_EMBED_SYSTEM_LIBS") != "0":
+            # Stage before compiling: emitted plugins must link the private
+            # OCCT copies, not whichever Homebrew install is on the builder.
+            print("  STAGE macOS plugin inputs", flush=True)
+            stage_plugin_inputs(stage)
+            print("  STAGE macOS platform libraries", flush=True)
+            has_libs = macos_libraries(stage)
+        print("  PRECOMPILE bundled scripts", flush=True)
+        precompile_plugins(stage if MACOS else None)
+        print("  PRECOMPILE bundled scripts done", flush=True)
+
     # Cache identity is read from this tiny member at startup. Hashing the
     # whole embedded ZIP on every launch costs hundreds of milliseconds for
     # the Windows payload; a build-time marker is both cheaper and exact.
@@ -580,28 +684,29 @@ def main():
             "%Y%m%d%H%M%S")
 
     with zipfile.ZipFile(PAYLOAD, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+        written = set()
         zf.writestr("dcad-version.txt", build_version + "\n")
         if embedded:
             # The shim resolves icons/fonts as <root>/assets/..., while the
             # source checkout keeps them under gui/assets.
-            add_tree(zf, ROOT / "gui" / "assets", "assets")
-            add_tree(zf, ROOT / "samples", "samples")
-            add_tree(zf, ROOT / "source", "source")
-            add_tree(zf, ROOT / "gui" / "scripts", "gui/scripts")
-            add_tree(zf, ROOT / "project-template", "project-template")
+            add_tree(zf, ROOT / "gui" / "assets", "assets", written)
+            add_tree(zf, ROOT / "samples", "samples", written)
+            add_tree(zf, ROOT / "source", "source", written)
+            add_tree(zf, ROOT / "gui" / "scripts", "gui/scripts", written)
+            add_tree(zf, ROOT / "project-template", "project-template", written)
             # The real GUI is started from the extracted cache directory, so
             # it must be part of the launcher's own payload.
-            gui_exe = ROOT / ("dcad-gui.exe" if WINDOWS else "dcad-gui")
             if not gui_exe.exists():
                 raise SystemExit("build the GUI binary before the launcher payload")
             add_file(zf, gui_exe,
-                     "dcad-gui.exe" if WINDOWS else "dcad-gui")
+                     "dcad-gui.exe" if WINDOWS else "dcad-gui", written)
             add_file(zf, BUILD / ("dcad_shim.lib" if WINDOWS else "libdcad_shim.a"),
-                     "build/" + ("dcad_shim.lib" if WINDOWS else "libdcad_shim.a"))
+                     "build/" + ("dcad_shim.lib" if WINDOWS else "libdcad_shim.a"),
+                     written)
             add_file(zf, ROOT / ("dcad.lib" if WINDOWS else "libdcad.a"),
-                     "dcad.lib" if WINDOWS else "libdcad.a")
+                     "dcad.lib" if WINDOWS else "libdcad.a", written)
             for path, name in plugin_files():
-                add_file(zf, path, name)
+                add_file(zf, path, name, written)
 
             print("  STAGE platform libraries", flush=True)
             if WINDOWS:
@@ -609,8 +714,8 @@ def main():
                 print("  STAGE private D toolchain", flush=True)
                 has_compiler = windows_toolchain(stage)
             elif MACOS:
-                if os.environ.get("DCAD_EMBED_SYSTEM_LIBS") != "0":
-                    has_libs = macos_libraries(stage)
+                # macOS libraries were staged before plugin emission so the
+                # plugins resolve the same private copies shipped in the app.
                 print("  STAGE private D toolchain", flush=True)
                 has_compiler = macos_toolchain(stage)
             elif os.environ.get("DCAD_EMBED_SYSTEM_LIBS") != "0":
@@ -621,8 +726,13 @@ def main():
             # Prefixing another "lib/" would produce lib/lib/*.dll, which the
             # launcher does not see when it stages DLLs next to the inner GUI.
             for path in sorted(stage.rglob("*")):
-                if path.is_file():
-                    zf.write(path, path.relative_to(stage).as_posix())
+                if not path.is_file():
+                    continue
+                name = path.relative_to(stage).as_posix()
+                if name in written:
+                    continue
+                zf.write(path, name)
+                written.add(name)
             zf.writestr("embedded.manifest",
                         "dcad=1\nlibs=" + ("1" if has_libs else "0") +
                         "\ncompiler=" + ("1" if has_compiler else "0") + "\n")
@@ -633,7 +743,7 @@ def main():
     # stage_runtime_files). Do this after the ZIP is closed so they are not
     # written twice and the launcher payload stays unchanged.
     if embedded and MACOS:
-        stage_runtime_files(stage)
+        stage_runtime_files(stage, gui_exe)
 
     if WINDOWS:
         rc = BUILD / "dcad_resources.rc"

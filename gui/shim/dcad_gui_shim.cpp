@@ -720,10 +720,12 @@ extern "C" int dcad_gui_selectable_icon(const char* id, const char* label,
                                         int selected, void* texID,
                                         float w, float h)
 {
-    float rowX = ImGui::GetCursorPosX();
     bool clicked = ImGui::Selectable(id, selected != 0,
                                      ImGuiSelectableFlags_SpanAvailWidth);
-    ImGui::SetCursorPosX(rowX + ImGui::GetTreeNodeToLabelSpacing());
+    // Selectable advances the cursor to the next line, but its hit box stays on
+    // the row it consumed. SameLine restores both Y and the line metrics so
+    // the icon and filename are drawn inside that same clickable row.
+    ImGui::SameLine(0, ImGui::GetTreeNodeToLabelSpacing());
     ImGui::Image(texID, ImVec2(w, h));
     ImGui::SameLine(0, 4.0f * g_uiScale);
     ImGui::TextUnformatted(label);

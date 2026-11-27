@@ -673,8 +673,10 @@ private:
         stderr.writefln("viewport: linked=%d log=%s", linked,
                         logLen > 0 ? fromStringz(log.ptr) : "(none)");
 
+        int totalVerts = mesh.vertexCount;
+        foreach (p; partMeshes) totalVerts += p.vertexCount;
         stderr.writefln("viewport: fbo=%u tex=%u depth=%u verts=%d parts=%d size=%dx%d",
-                        fbo, colorTex, depthRb, mesh.vertexCount,
+                        fbo, colorTex, depthRb, totalVerts,
                         partMeshes.length, width, height);
 
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);

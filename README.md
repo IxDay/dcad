@@ -144,14 +144,16 @@ and module-style scripts are supported, including one runnable module per
 element in `samples/coffee-table/`.
 
 `dcad-gui` also acts as a project handler:
-`dcad-gui <directory|.dcad.toml|file.d>` opens a plain directory of D sources
-whose root is marked by a `.dcad.toml` file (legacy `dcad.json` still works), and
+`dcad-gui <directory|.dcad/config.toml|file.d>` opens a plain directory of D
+sources whose root is marked by `.dcad/config.toml` (legacy `.dcad.toml`,
+`dcad.toml` and `dcad.json` still work, and a bare directory is promoted), and
 `dcad-gui --new-project <directory>`
 (or **File > New Project...**) scaffolds the CC BY 4.0
 [daimochi-tsugi](https://ixday.github.io/carpentry/#daimochi-tsugi) joint from
-`project-template/daimochi`. The Agent tab stores its transcript under
-`.dcad/history.jsonl` in the open project; API credentials remain in dcad's
-app cache. See [`gui/README.md`](gui/README.md) for controls and the
+`project-template/daimochi`. The config's `name` is optional; when omitted it
+is the project directory's name. The Agent tab stores its transcript in the
+same `.dcad/` directory, as `.dcad/history.jsonl`, and keeps API credentials in
+`.dcad/config.toml`. See [`gui/README.md`](gui/README.md) for controls and the
 execution-model tradeoff.
 
 ## Samples

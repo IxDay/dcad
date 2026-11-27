@@ -1,18 +1,18 @@
 # Daimochi-tsugi — 台持ち継ぎ
 
 This project is the default scaffold created by **File > New Project** in
-`dcad-gui`. It is an ordinary directory of D source: no hidden session state, no
-generated cache, and nothing that only exists inside the GUI.
+`dcad-gui`. It is an ordinary directory of D source plus a hidden `.dcad/`
+folder that marks it as a dcad project.
 
 ## Open and run
 
 Open the directory itself (`dcad-gui /path/to/this-directory`) or pass
-`.dcad.toml` to `dcad-gui` as a project handler, then click a `.d` file in the
-sidebar and press **Cmd/Ctrl+Enter**. Each part opens and renders on its own;
-`main.d` opens the complete assembly and its take-apart animation.
+`.dcad/config.toml` to `dcad-gui` as a project handler, then click a `.d` file in
+the sidebar and press **Cmd/Ctrl+Enter**. Each part opens and renders on its
+own; `main.d` opens the complete assembly and its take-apart animation.
 
-`.dcad.toml` marks this directory as a project root. Its first key is the
-project `name`; the other keys are:
+`.dcad/config.toml` is the canonical project marker. Its `name` key is optional
+and defaults to the directory name; the other keys are:
 
 - `entry` names the assembly source shown on open;
 - every `.d` file beside it is compiled into the hot-loaded plugin, so helper
@@ -23,7 +23,8 @@ project `name`; the other keys are:
 
 | File | Purpose |
 |---|---|
-| `.dcad.toml` | Project-root marker (name first, then entry point) |
+| `.dcad/config.toml` | Project marker and agent config (`name`, `entry`, credentials) |
+| `.dcad.toml` | Legacy marker kept for older dcad releases |
 | `main.d` | Assembly entry point: `dcadMain()`, `dcadParts()`, `dcadPoses()` |
 | `dimensions.d` | Shared millimetre dimensions |
 | `daimochi_util.d` | Small wrappers over the dcad/OCCT shim |

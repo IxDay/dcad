@@ -52,6 +52,22 @@ int main(string[] args)
     immutable overrideRoot = environment.get("DCAD_SCRIPT_HOST_ROOT", "");
     immutable root = overrideRoot.length ? overrideRoot : resourceRoot();
 
+    // Build-time mode: print the cache key ScriptHost will require for a
+    // project. tools/build_resources.py compares it with the emitted .key so a
+    // stale plugin from an older build cannot be shipped silently.
+    if (args.length >= 3 && args[1] == "--plugin-key")
+    {
+        immutable projectDir = args[2];
+        immutable entry = args.length > 3 ? args[3] : "main.d";
+        immutable source = readText(buildPath(projectDir, entry));
+        immutable keyWork = buildPath(tempDir(), "dcad-plugin-key-"
+                                     ~ processId.to!string);
+        mkdirRecurse(keyWork);
+        auto keyHost = new ScriptHost(keyWork, root, projectDir);
+        writeln(keyHost.sourceCacheKey(source));
+        return 0;
+    }
+
     // Build-time mode: compile a project's plugin and copy it, with its source
     // key, into build/ so the payload can load it without invoking ldc2 on
     // startup. This uses the same ScriptHost path as an ordinary Run.
@@ -184,18 +200,26 @@ int main(string[] args)
     // exposes the three joints expected by the parts overlay.
     immutable projectDir = buildPath(workDir, "daimochi-tsugi");
     auto project = Project.create(projectDir, root);
-    foreach (name; [".dcad.toml", "README.md", "main.d", "dimensions.d",
-                    "daimochi_util.d", "part_a.d", "part_b.d", "key.d",
-                    "motion.d"])
+    foreach (name; [".dcad.toml", ".dcad/config.toml", "README.md", "main.d",
+                    "dimensions.d", "daimochi_util.d", "part_a.d", "part_b.d",
+                    "key.d", "motion.d"])
         if (!exists(buildPath(project.root, name)))
         {
             stderr.writeln("new project missing ", name);
             return 1;
         }
+    if (!canFind(readText(buildPath(project.root, ".dcad", "config.toml")),
+                 "entry = \"main.d\""))
+    {
+        stderr.writeln("new project config does not identify the entry");
+        return 1;
+    }
 
-    // The TOML marker is the project root: opening the directory, the marker
-    // itself, or a source file must all resolve to the same name and entry.
+    // The canonical config is the project root: opening the directory, the
+    // config itself, the legacy marker or a source file must all resolve to
+    // the same name and entry.
     foreach (candidate; [project.root,
+                         buildPath(project.root, ".dcad", "config.toml"),
                          buildPath(project.root, ".dcad.toml"),
                          project.entryPath])
     {
@@ -206,6 +230,34 @@ int main(string[] args)
                            opened.name, " / ", opened.entry);
             return 1;
         }
+    }
+
+    // A config without a name uses the directory name, and saving credentials
+    // into that same file must not erase project metadata.
+    immutable plainDir = buildPath(workDir, "plain-project");
+    mkdirRecurse(buildPath(plainDir, ".dcad"));
+    write(buildPath(plainDir, "main.d"),
+          "void main() {}\n");
+    write(buildPath(plainDir, ".dcad", "config.toml"),
+          "entry = \"main.d\"\ndescription = \"no explicit name\"\n");
+    auto plain = Project.open(plainDir);
+    if (plain.name != "plain-project" || plain.entry != "main.d")
+    {
+        stderr.writeln("directory-name project fallback failed: ", plain.name);
+        return 1;
+    }
+    auto markerHolder = new AgentCredentials();
+    AgentCredential markerCredential;
+    markerCredential.apiKey = "secret";
+    markerCredential.baseURL = "https://example.invalid/v1";
+    markerHolder.save(markerCredential, plainDir);
+    auto plainConfig = readText(buildPath(plainDir, ".dcad", "config.toml"));
+    if (!canFind(plainConfig, "entry = \"main.d\"") ||
+        !canFind(plainConfig, "description = \"no explicit name\"") ||
+        !canFind(plainConfig, "api_key = \"secret\""))
+    {
+        stderr.writeln("/auth erased project config metadata");
+        return 1;
     }
 
     // A distinct scratch dir avoids reusing a dylib path from the first host:

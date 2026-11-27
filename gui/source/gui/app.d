@@ -191,7 +191,8 @@ private string precompiledBase(string root, string projectRoot,
         currentFile == "table.d")
         return "dcad-coffee-table";
     if (currentFile == "main.d" &&
-        exists(buildPath(projectRoot, ".dcad.toml")))
+        (exists(buildPath(projectRoot, ".dcad", "config.toml")) ||
+         exists(buildPath(projectRoot, ".dcad.toml"))))
         return "dcad-daimochi";
     return null;
 }

@@ -1,10 +1,11 @@
 /**
  * Project format and scaffolding.
  *
- * A project is a plain directory with a `.dcad.toml` marker and D sources.
- * The marker's directory is the project root, so `dcad-gui` accepts either the
- * directory, the marker file, or any source file inside it as its first
- * argument. Older `dcad.json` manifests are still read for compatibility.
+ * A project is a plain directory with a `.dcad/config.toml` marker and D
+ * sources. The marker's directory is the project root, so `dcad-gui` accepts
+ * the directory, the config file, or any source file inside it as its first
+ * argument. Older `.dcad.toml`, `dcad.toml` and `dcad.json` manifests are still
+ * read and migrated to `.dcad/config.toml`.
  *
  * The same module creates File > New Project from the template embedded in the
  * runtime payload, so the menu and the command-line path cannot diverge.
@@ -21,9 +22,20 @@ import std.string : strip, splitLines;
 
 import gui.platform : resourceRoot;
 
-/// Manifest names accepted as project markers. The first one is what New
-/// Project writes; the others keep existing projects and early releases usable.
-private enum string[] manifestNames = [".dcad.toml", "dcad.toml", "dcad.json"];
+/// The canonical project marker. It doubles as the agent configuration file,
+/// so project identity and credentials live in the same hidden directory.
+private enum string projectConfigRel = ".dcad/config.toml";
+
+/// Older manifest names, kept readable so existing projects keep working.
+private enum string[] legacyManifestNames = [".dcad.toml", "dcad.toml",
+                                             "dcad.json"];
+
+/// Project marker path. This deliberately does not use the agent config
+/// override: that override is for automation, not for project detection.
+private string projectConfigPath(string root)
+{
+    return buildPath(root, buildPath(".dcad", "config.toml"));
+}
 
 /// Parsed project manifest.
 struct Project
@@ -58,21 +70,39 @@ struct Project
         }
         else
         {
-            result.root = dirName(resolved);
             auto file = baseName(resolved);
-            if (!isManifestName(file))
-                requestedSource = file;
+            auto parent = dirName(resolved);
+            if (isProjectConfig(resolved))
+            {
+                // `.dcad/config.toml` identifies its parent's parent, not the
+                // hidden state directory itself.
+                result.root = dirName(parent);
+            }
+            else
+            {
+                result.root = parent;
+                if (!isManifestName(file))
+                    requestedSource = file;
+            }
         }
 
-        foreach (candidate; manifestNames)
+        // Read legacy metadata first and let the canonical config override it.
+        // A config that only stores credentials therefore inherits the old
+        // marker's name/entry instead of losing them.
+        bool hadLegacyManifest;
+        foreach (candidate; legacyManifestNames)
         {
             immutable manifest = buildPath(result.root, candidate);
             if (exists(manifest))
             {
+                hadLegacyManifest = true;
                 result.readManifest(manifest);
-                break;
             }
         }
+        immutable config = projectConfigPath(result.root);
+        if (exists(config))
+            result.readManifest(config);
+
         // An explicitly named source wins over the manifest's default entry.
         if (requestedSource.length)
             result.entry = requestedSource;
@@ -83,6 +113,11 @@ struct Project
         immutable entryPath = buildPath(result.root, result.entry);
         if (!exists(entryPath))
             throw new Exception("source not found: " ~ entryPath);
+        // Opening a bare directory promotes it to the canonical layout. Legacy
+        // manifests stay untouched so source checkouts are not modified.
+        // Failure is ignored: read-only projects still open normally.
+        if (!hadLegacyManifest)
+            result.writeConfigIfMissing();
         return result;
     }
 
@@ -108,20 +143,53 @@ struct Project
 
         Project result;
         result.root = target;
-        immutable marker = buildPath(target, manifestNames[0]);
+        immutable marker = buildPath(target, legacyManifestNames[0]);
         enforce(exists(marker), "project template is missing " ~ marker);
         result.readManifest(marker);
         if (!result.name.length)
             result.name = baseName(target);
+        result.writeConfigIfMissing();
         return result;
     }
 
 private:
     static bool isManifestName(string name)
     {
-        foreach (candidate; manifestNames)
+        if (name == "config.toml") return true;
+        foreach (candidate; legacyManifestNames)
             if (name == candidate) return true;
         return false;
+    }
+
+    static bool isProjectConfig(string path)
+    {
+        return baseName(path) == "config.toml" &&
+               baseName(dirName(path)) == ".dcad";
+    }
+
+    /// Create the canonical marker when an older layout is opened. Project
+    /// identity is written explicitly so a bare directory keeps whatever name
+    /// was resolved from a legacy manifest or its directory name.
+    void writeConfigIfMissing() const
+    {
+        immutable path = projectConfigPath(root);
+        if (exists(path)) return;
+        try
+        {
+            mkdirRecurse(dirName(path));
+            string text = "# dcad project configuration\n";
+            if (name.length)
+                text ~= "name = " ~ quoteToml(name) ~ "\n";
+            text ~= "entry = " ~ quoteToml(entry.length ? entry : "main.d")
+                 ~ "\n";
+            if (description.length)
+                text ~= "description = " ~ quoteToml(description) ~ "\n";
+            write(path, text);
+        }
+        catch (Exception)
+        {
+            // A read-only project is still a valid project.
+        }
     }
 
     void readManifest(string path)
@@ -197,6 +265,25 @@ private string unquoteToml(string value)
         }
     }
     return result;
+}
+
+/// Quote a value for the flat project config we emit.
+private string quoteToml(string value)
+{
+    string result = "\"";
+    foreach (char c; value)
+    {
+        switch (c)
+        {
+            case '\n': result ~= "\\n"; break;
+            case '\t': result ~= "\\t"; break;
+            case '\r': result ~= "\\r"; break;
+            case '"':  result ~= "\\\""; break;
+            case '\\': result ~= "\\\\"; break;
+            default:   result ~= c; break;
+        }
+    }
+    return result ~ "\"";
 }
 
 /// Make a non-existing sibling of `parent`, e.g. `daimochi-tsugi-1`.

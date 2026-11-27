@@ -33,7 +33,10 @@ if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
         # Point the already-linked inner GUI at the dylibs unpacked beside it.
         python3 tools/relocate_macos.py
     fi
-    dub build :gui-launcher "$BUILD_FLAG"
+    # Force the pre-build payload step: dub does not track the generated ZIP as
+    # a source, so an incremental build could otherwise ship stale plugins or
+    # libraries after a tools/ or project-source change.
+    dub build :gui-launcher "$BUILD_FLAG" --force
     python3 tools/check_payload.py build/dcad_payload.bin
 
     # GUI-subsystem launchers have no console to print to, so ask them to write
@@ -56,6 +59,19 @@ if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
     }
     ROOT=$(cat "$ROOT_FILE")
     test -f "$ROOT/dcad-gui" || test -f "$ROOT/dcad-gui.exe"
+    if [ "$(uname -s)" = Darwin ]; then
+        # The checkout GUI keeps Homebrew rpaths for `dub run :gui`, but the
+        # shipped copy must only resolve its bundled dylibs. Otherwise a host
+        # OCCT and a bundled OCCT can meet inside one process.
+        for RP in $(otool -l "$ROOT/dcad-gui" | awk '/LC_RPATH/{p=1} p&&/path /{print $2} /^load command/{if(p)p=0}'); do
+            case "$RP" in
+                /opt/homebrew*|/usr/local*)
+                    echo "packaged GUI has a Homebrew rpath: $RP" >&2
+                    exit 1
+                    ;;
+            esac
+        done
+    fi
     test -f "$ROOT/project-template/daimochi/.dcad.toml"
     test -f "$ROOT/libdcad.a" || test -f "$ROOT/dcad.lib"
     test -d "$ROOT/assets/icons"

@@ -55,8 +55,8 @@ arrow to expand or collapse folders, and click a file to load it into the editor
 The sidebar is always visible. With no argument, dcad opens a project from the
 launch directory. If it was not launched from a project, a native modal asks
 whether to open an existing project or create a new one; no sample is opened
-implicitly. You can also pass a project directory, `.dcad.toml` or a `.d` file to
-`dcad-gui` on the command line. **File > New Project...** (Cmd/Ctrl+N) scaffolds
+implicitly. You can also pass a project directory, `.dcad/config.toml` or a `.d`
+file to `dcad-gui` on the command line. **File > New Project...** (Cmd/Ctrl+N) scaffolds
 the three-piece daimochi-tsugi joint in a folder you choose and opens `main.d`.
 `samples/coffee-table` is a real project with `.dcad.toml` and `table.d` as its
 entry point, so it can be selected in the open dialog to test the full animated
@@ -79,11 +79,13 @@ running turn from any tab, and Cmd/Ctrl+Enter inserts a newline. Type
 `/model`, `/auth` and `/status`. Model edits are staged through those slash
 commands, which refresh the open editor after a change is applied or restored.
 
-Agent history belongs to the project: every opened project gets a `.dcad/`
-directory containing `history.jsonl`, agent settings in `config.toml`, and,
-after a model edit, reversible patches in `.dcad/patches/`. API credentials are
-dcad-owned and stay in that project config; the installed OpenCode auth store is
-not read. Free `opencode/big-pickle` needs no account: like OpenCode, dcad sends
+Agent history belongs to the project: every created or bare opened project gets
+a `.dcad/` directory containing `config.toml` (the canonical project marker),
+`history.jsonl`, and, after a model edit, reversible patches in `.dcad/patches/`.
+The config's `name` is optional and defaults to the directory name. API
+credentials are dcad-owned and stay in that project config; `/auth` preserves
+the project metadata, and the installed OpenCode auth store is not read. Free
+`opencode/big-pickle` needs no account: like OpenCode, dcad sends
 the public key `public` when no key is configured, with free usage rate-limited
 per network. `DCAD_AGENT_API_KEY`, `DCAD_AGENT_BASE_URL` and
 `DCAD_AGENT_CONFIG_DIR` override the persisted values for automation.

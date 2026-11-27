@@ -12,6 +12,7 @@ import std.algorithm.searching : countUntil;
 import std.file : exists, mkdirRecurse, readText, remove, rename, write;
 import std.path : dirName;
 import std.process : environment;
+import std.array : join;
 import std.string : strip, splitLines;
 import gui.agentcore.paths : agentConfigPath;
 
@@ -84,13 +85,41 @@ final class AgentCredentials
         auto path = agentConfigPath(projectRoot);
         mkdirRecurse(dirName(path));
 
-        string text = "# dcad agent configuration\n"
-                    ~ "api_key = " ~ quoteToml(credential.apiKey.length
-                                                ? credential.apiKey
-                                                : publicAgentAPIKey) ~ "\n"
-                    ~ "base_url = " ~ quoteToml(credential.baseURL.length
-                                                ? credential.baseURL
-                                                : defaultAgentBaseURL) ~ "\n";
+        // The same file also stores project metadata. Replace only the two
+        // credential keys so `/auth` cannot erase `name`, `entry` or comments.
+        string[] kept;
+        if (exists(path))
+        {
+            try
+            {
+                foreach (raw; splitLines(readText(path)))
+                {
+                    auto line = strip(raw);
+                    auto equal = countUntil(line, '=');
+                    if (equal >= 0)
+                    {
+                        auto key = strip(line[0 .. equal]);
+                        if (key == "api_key" || key == "base_url")
+                            continue;
+                    }
+                    kept ~= raw;
+                }
+            }
+            catch (Exception)
+            {
+                // A corrupt config is replaced with a fresh one.
+                kept = null;
+            }
+        }
+        string text = kept.length
+            ? kept.join("\n") ~ "\n"
+            : "# dcad project configuration\n";
+        text ~= "api_key = " ~ quoteToml(credential.apiKey.length
+                                         ? credential.apiKey
+                                         : publicAgentAPIKey) ~ "\n"
+             ~ "base_url = " ~ quoteToml(credential.baseURL.length
+                                         ? credential.baseURL
+                                         : defaultAgentBaseURL) ~ "\n";
 
         auto temporary = path ~ ".tmp";
         write(temporary, text);
