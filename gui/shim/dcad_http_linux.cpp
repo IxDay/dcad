@@ -141,7 +141,8 @@ int dcad_http_post_stream(const DcadHttpRequest* request,
         const char* detail = errorBuffer[0] != '\0' ? errorBuffer : curl_easy_strerror(code);
         resultOut->error = copy_error(detail);
     } else if (status < 200 || status >= 300) {
-        resultOut->error = copy_error("HTTP " + std::to_string(status));
+        resultOut->error = copy_error(
+            ("HTTP " + std::to_string(status)).c_str());
     }
 
     curl_slist_free_all(headers);

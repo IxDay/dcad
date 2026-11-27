@@ -1,0 +1,4 @@
+# Keep build scripts and the vendored OpenCode pin byte-identical on every
+# target. Some Windows checkouts default to CRLF, which breaks path parsing and
+# source hashes in the pin verifier.
+* text=auto eol=lf

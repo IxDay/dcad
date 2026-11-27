@@ -8,8 +8,20 @@ test -f "$PIN_DIR/SOURCE_PIN.txt"
 test -f "$PIN_DIR/MANIFEST.sha256"
 test -f "$PIN_DIR/PORT_MAP.txt"
 
-grep -q '^tag: v2\.3\.2$' "$PIN_DIR/SOURCE_PIN.txt"
-grep -q '^commit: c0ad18b402eb2827fc1ee71c171b1177b3fc02d1$' "$PIN_DIR/SOURCE_PIN.txt"
+# Windows checkouts may use CRLF. Normalize text before matching or hashing so
+# the pin stays byte-identical to the upstream source on every target.
+normalized() {
+    tr -d '\r' < "$1"
+}
+
+if ! normalized "$PIN_DIR/SOURCE_PIN.txt" | grep -q '^tag: v2\.3\.2$'; then
+    echo "unexpected OpenCode source tag" >&2
+    exit 1
+fi
+if ! normalized "$PIN_DIR/SOURCE_PIN.txt" | grep -q '^commit: c0ad18b402eb2827fc1ee71c171b1177b3fc02d1$'; then
+    echo "unexpected OpenCode source commit" >&2
+    exit 1
+fi
 
 if command -v sha256sum >/dev/null 2>&1; then
     HASH_CMD="sha256sum"
@@ -18,7 +30,8 @@ else
 fi
 
 fail=0
-while IFS= read -r line; do
+while IFS= read -r raw; do
+    line=$(printf '%s\n' "$raw" | tr -d '\r')
     case "$line" in ''|'#'*) continue ;; esac
     expected=${line%%  *}
     path=${line#*  }
@@ -27,7 +40,7 @@ while IFS= read -r line; do
         fail=1
         continue
     }
-    actual=$($HASH_CMD "$PIN_DIR/$path" | awk '{print $1}')
+    actual=$(normalized "$PIN_DIR/$path" | $HASH_CMD | awk '{print $1}')
     if [ "$actual" != "$expected" ]; then
         echo "checksum mismatch: $path" >&2
         fail=1
@@ -35,7 +48,8 @@ while IFS= read -r line; do
 done < "$PIN_DIR/MANIFEST.sha256"
 
 # Every upstream file named by the translation map must be pinned.
-while IFS= read -r line; do
+while IFS= read -r raw; do
+    line=$(printf '%s\n' "$raw" | tr -d '\r')
     case "$line" in ''|'#'*) continue ;; esac
     paths=${line#* }
     for path in $paths; do
