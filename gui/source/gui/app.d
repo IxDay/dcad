@@ -26,7 +26,7 @@ import gui.agentcore.native_transport : AgentNativeTransport;
 import gui.platform : processId, nativeHandles, resourceRoot;
 import gui.project : Project, ProjectChoice, askProjectChoice,
                      chooseExistingProject, chooseProjectParent,
-                     fallbackProjectParent, uniqueProjectPath;
+                     fallbackProjectParent, newProjectPath;
 
 import bindbc.glfw;
 import bindbc.opengl;
@@ -251,7 +251,7 @@ void main(string[] args)
     }
 
     // Project handler: `dcad-gui <project-dir|.dcad.toml|source.d>` opens a
-    // project, while `--new-project <target-dir>` scaffolds the daimochi
+    // project, while `--new-project <parent-dir>` scaffolds the daimochi
     // sample. With no argument, a project in the launch directory is opened;
     // otherwise a native modal offers Open Existing / Create New. No sample
     // project is opened implicitly.
@@ -259,9 +259,9 @@ void main(string[] args)
     immutable explicitArg = args.length > 1;
     if (explicitArg && args[1] == "--new-project")
     {
-        immutable target = args.length > 2
-            ? args[2] : uniqueProjectPath(fallbackProjectParent(),
-                                          "daimochi-tsugi");
+        immutable parent = args.length > 2 ? args[2]
+                                           : fallbackProjectParent();
+        immutable target = newProjectPath(parent);
         try
             project = Project.create(target, root);
         catch (Exception e)
@@ -308,10 +308,8 @@ void main(string[] args)
             {
                 auto parent = chooseProjectParent();
                 if (parent is null) parent = fallbackProjectParent();
-                mkdirRecurse(parent);
                 try
-                    project = Project.create(
-                        uniqueProjectPath(parent, "daimochi-tsugi"), root);
+                    project = Project.create(newProjectPath(parent), root);
                 catch (Exception e)
                     stderr.writeln("new project failed: ", e.msg);
                 break;
@@ -757,13 +755,11 @@ void main(string[] args)
         {
             parent = fallbackProjectParent();
             usedFallback = true;
-            mkdirRecurse(parent);
         }
 
         try
         {
-            auto created = Project.create(
-                uniqueProjectPath(parent, "daimochi-tsugi"), root);
+            auto created = Project.create(newProjectPath(parent), root);
             destroy(host);
             host = new ScriptHost(workDir, root, created.root);
             project = created;

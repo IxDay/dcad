@@ -11,9 +11,9 @@ import core.thread.osthread : Thread;
 import core.time : dur;
 import std.algorithm : startsWith;
 import std.algorithm.searching : canFind;
-import std.file : append, exists, readText, mkdirRecurse, tempDir, getcwd,
+import std.file : append, exists, isDir, readText, mkdirRecurse, tempDir, getcwd,
                   chdir, copy, write;
-import std.path : baseName, buildPath;
+import std.path : baseName, buildPath, dirName;
 import std.process : environment;
 import std.conv : to;
 import std.json : JSONType, JSONValue, parseJSON;
@@ -42,7 +42,7 @@ import gui.lsp.protocol : LspFrameReader, encodeLspMessage,
                           lspNotification, lspPathToURI, lspResponse,
                           parseLspCompletions, parseLspDiagnostics;
 import gui.platform : processId, resourceRoot, sharedLibraryExtension;
-import gui.project : Project;
+import gui.project : Project, newProjectPath;
 import gui.script_host : ScriptHost;
 
 int main(string[] args)
@@ -198,9 +198,18 @@ int main(string[] args)
 
     // File > New Project uses the same template; check it compiles and
     // exposes the three joints expected by the parts overlay.
-    immutable projectDir = buildPath(workDir, "daimochi-tsugi");
+    immutable projectParent = buildPath(workDir, "new-project-parent");
+    immutable projectDir = newProjectPath(projectParent);
+    if (baseName(projectDir) != "daimochi-tsugi" ||
+        dirName(projectDir) != projectParent)
+    {
+        stderr.writeln("new project was not created in a daimochi-tsugi child: ",
+                       projectDir);
+        return 1;
+    }
     auto project = Project.create(projectDir, root);
-    foreach (name; [".dcad.toml", ".dcad/config.toml", "README.md", "main.d",
+    foreach (name; [".dcad.toml", ".dcad/config.toml", ".dcad/history.jsonl",
+                    ".dcad/patches/.keep", "README.md", "main.d",
                     "dimensions.d", "daimochi_util.d", "part_a.d", "part_b.d",
                     "key.d", "motion.d"])
         if (!exists(buildPath(project.root, name)))
@@ -208,6 +217,11 @@ int main(string[] args)
             stderr.writeln("new project missing ", name);
             return 1;
         }
+    if (!isDir(buildPath(project.root, ".dcad", "patches")))
+    {
+        stderr.writeln("new project has no patches directory");
+        return 1;
+    }
     if (!canFind(readText(buildPath(project.root, ".dcad", "config.toml")),
                  "entry = \"main.d\""))
     {

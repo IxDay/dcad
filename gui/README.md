@@ -56,8 +56,9 @@ The sidebar is always visible. With no argument, dcad opens a project from the
 launch directory. If it was not launched from a project, a native modal asks
 whether to open an existing project or create a new one; no sample is opened
 implicitly. You can also pass a project directory, `.dcad/config.toml` or a `.d`
-file to `dcad-gui` on the command line. **File > New Project...** (Cmd/Ctrl+N) scaffolds
-the three-piece daimochi-tsugi joint in a folder you choose and opens `main.d`.
+file to `dcad-gui` on the command line. **File > New Project...** (Cmd/Ctrl+N) creates
+a `daimochi-tsugi` subdirectory inside the folder you choose, scaffolds the
+three-piece joint there, and opens `main.d`.
 `samples/coffee-table` is a real project with `.dcad.toml` and `table.d` as its
 entry point, so it can be selected in the open dialog to test the full animated
 assembly. **Save** always writes the open file in that directory. Each

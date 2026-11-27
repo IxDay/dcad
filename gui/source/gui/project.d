@@ -20,6 +20,7 @@ import std.process : execute;
 import std.algorithm.searching : canFind, countUntil, endsWith, startsWith;
 import std.string : strip, splitLines;
 
+import gui.agentcore.paths : agentHistoryPath, agentPatchesDir;
 import gui.platform : resourceRoot;
 
 /// The canonical project marker. It doubles as the agent configuration file,
@@ -173,18 +174,40 @@ private:
     void writeConfigIfMissing() const
     {
         immutable path = projectConfigPath(root);
-        if (exists(path)) return;
+        if (!exists(path))
+        {
+            try
+            {
+                mkdirRecurse(dirName(path));
+                string text = "# dcad project configuration\n";
+                if (name.length)
+                    text ~= "name = " ~ quoteToml(name) ~ "\n";
+                text ~= "entry = " ~ quoteToml(entry.length ? entry : "main.d")
+                     ~ "\n";
+                if (description.length)
+                    text ~= "description = " ~ quoteToml(description) ~ "\n";
+                write(path, text);
+            }
+            catch (Exception)
+            {
+                // A read-only project is still a valid project.
+            }
+        }
+        ensureAgentState(root);
+    }
+
+    /// Create the project-local agent state eagerly. History is appended to
+    /// later, but an empty file and the patch directory make a newly created
+    /// project self-describing and match the documented `.dcad/` layout.
+    private static void ensureAgentState(string root)
+    {
         try
         {
-            mkdirRecurse(dirName(path));
-            string text = "# dcad project configuration\n";
-            if (name.length)
-                text ~= "name = " ~ quoteToml(name) ~ "\n";
-            text ~= "entry = " ~ quoteToml(entry.length ? entry : "main.d")
-                 ~ "\n";
-            if (description.length)
-                text ~= "description = " ~ quoteToml(description) ~ "\n";
-            write(path, text);
+            mkdirRecurse(agentPatchesDir(root));
+            immutable history = agentHistoryPath(root);
+            if (!exists(history)) write(history, "");
+            immutable keep = buildPath(agentPatchesDir(root), ".keep");
+            if (!exists(keep)) write(keep, "");
         }
         catch (Exception)
         {
@@ -295,6 +318,15 @@ string uniqueProjectPath(string parent, string baseName_)
     for (int index = 1; exists(candidate); ++index)
         candidate = buildPath(parent, baseName_ ~ "-" ~ index.to!string);
     return candidate;
+}
+
+/// New projects always live in a `daimochi-tsugi` child of the chosen parent.
+/// The parent itself is never used as the project root, so choosing an empty
+/// folder cannot scatter the scaffold across its top level.
+string newProjectPath(string parent)
+{
+    if (parent.length) mkdirRecurse(parent);
+    return uniqueProjectPath(parent, "daimochi-tsugi");
 }
 
 /// Choice presented by the native first-run modal. No project is opened by
