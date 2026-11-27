@@ -1,4 +1,4 @@
-# This file marks its directory as a dcad project root.
-name = "Daimochi-tsugi"
+# dcad project configuration
+# The generated project writes its own name from the destination directory.
 entry = "main.d"
 description = "台持ち継ぎ — a shelved splice with a housed tenon and komisen key"

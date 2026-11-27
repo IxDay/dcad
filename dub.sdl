@@ -127,7 +127,7 @@ subPackage {
     extraDependencyFiles "gui/source/launcher/embedded.d" \
                          "tools/build_shims.py" "tools/build_resources.py" \
                          "tools/relocate_macos.py" \
-                         "project-template/daimochi/.dcad.toml"
+                         "project-template/daimochi/.dcad/config.toml"
 }
 
 # Exercises the script host's body-style and module-style forms headlessly.

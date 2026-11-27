@@ -11,8 +11,10 @@ Open the directory itself (`dcad-gui /path/to/this-directory`) or pass
 the sidebar and press **Cmd/Ctrl+Enter**. Each part opens and renders on its
 own; `main.d` opens the complete assembly and its take-apart animation.
 
-`.dcad/config.toml` is the canonical project marker. Its `name` key is optional
-and defaults to the directory name; the other keys are:
+`.dcad/config.toml` is the only hidden entry at a generated project's root. Its
+`name` is the directory chosen in **File > New Project**; older configs without
+a `name` still default to the directory name. The template itself omits `name`
+so each new project gets its own identity. The other keys are:
 
 - `entry` names the assembly source shown on open;
 - every `.d` file beside it is compiled into the hot-loaded plugin, so helper
@@ -24,10 +26,11 @@ and defaults to the directory name; the other keys are:
 | File | Purpose |
 |---|---|
 | `.dcad/config.toml` | Project marker and agent config (`name`, `entry`, credentials) |
-| `.dcad.toml` | Legacy marker kept for older dcad releases |
+| `.dcad/history.jsonl` | Empty agent transcript created with the project |
+| `.dcad/patches/` | Reversible patches from agent edits |
 | `main.d` | Assembly entry point: `dcadMain()`, `dcadParts()`, `dcadPoses()` |
 | `dimensions.d` | Shared millimetre dimensions |
-| `daimochi_util.d` | Small wrappers over the dcad/OCCT shim |
+| `utils.d` | Small wrappers over the dcad/OCCT shim |
 | `part_a.d` | Receiving beam (part A) |
 | `part_b.d` | Shelved beam with the housed tenon (part B) |
 | `key.d` | The komisen through-key |

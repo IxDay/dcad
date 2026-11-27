@@ -365,6 +365,16 @@ struct RunResult
     bool ok() const { return error.length == 0 && shape !is null; }
 }
 
+/// A compiled plugin that has not been loaded yet. Compilation can run on a
+/// worker thread; dlopen and the plugin entry point stay on the GUI thread.
+struct PreparedPlugin
+{
+    string path;
+    bool owned;
+    string error;
+    bool ok() const { return error.length == 0 && path.length != 0; }
+}
+
 final class ScriptHost
 {
 private:
@@ -434,9 +444,10 @@ public:
     /// emitter to copy a freshly compiled image into the release payload.
     string loadedPath() const { return loadedDylibPath; }
 
-    /// Load a plugin shipped with the release when its key still matches. If
-    /// it is missing, stale, or cannot be loaded, compile the source normally.
-    RunResult runPrecompiled(string source, string pluginBase)
+    /// Find or compile a plugin without loading it. This only touches files
+    /// and runs ldc2 as a child process, so a worker thread may call it while
+    /// the GUI thread draws a loading modal.
+    PreparedPlugin prepare(string source, string pluginBase)
     {
         if (pluginBase.length)
         {
@@ -453,11 +464,9 @@ public:
                 if (exists(plugin) && exists(keyPath) &&
                     readText(keyPath).strip == key)
                 {
-                    auto cached = loadPlugin(plugin, false);
-                    if (cached.ok()) return cached;
                     if (debugCache)
-                        stderr.writeln("script cache: rejected ",
-                                       cached.error);
+                        stderr.writeln("script cache: selected ", plugin);
+                    return PreparedPlugin(plugin, false, null);
                 }
             }
             catch (Exception e)
@@ -467,15 +476,54 @@ public:
                     stderr.writeln("script cache: exception ", e.msg);
             }
         }
-        return run(source);
+        return compile(source);
+    }
+
+    /// Load a prepared plugin and run its entry point. dlopen, OCCT shape
+    /// construction and the D plugin ABI all stay on the calling GUI thread.
+    /// A shipped plugin that fails to load is rebuilt from `source` as a
+    /// fail-soft fallback, matching the old cache behaviour.
+    RunResult runPrepared(PreparedPlugin prepared, string source = null)
+    {
+        unload();
+        if (!prepared.ok())
+            return RunResult(null, prepared.error);
+        auto result = loadPlugin(prepared.path, prepared.owned);
+        if (!result.ok() && !prepared.owned && source.length)
+        {
+            auto fallback = compile(source);
+            if (fallback.ok())
+            {
+                auto retried = loadPlugin(fallback.path, fallback.owned);
+                if (!retried.ok() && fallback.owned && exists(fallback.path))
+                    remove(fallback.path);
+                return retried;
+            }
+            return RunResult(null, fallback.error);
+        }
+        if (!result.ok() && prepared.owned && exists(prepared.path))
+            remove(prepared.path);
+        return result;
+    }
+
+    /// Single-call form used by headless tests and ordinary Run actions.
+    RunResult runPrecompiled(string source, string pluginBase)
+    {
+        return runPrepared(prepare(source, pluginBase), source);
     }
 
     /// Compile and run the given script source. Returns a cloned shape that
     /// stays valid after the plugin is unloaded on the next run.
     RunResult run(string source)
     {
-        unload();
+        return runPrecompiled(source, null);
+    }
 
+    /// Compile the given source into a shared library. The generated sources
+    /// and object are removed; the library is kept until runPrepared() loads
+    /// it (or until a failed load deletes it).
+    PreparedPlugin compile(string source)
+    {
         immutable stem = "script_" ~ nextScriptGeneration().to!string;
         immutable srcPath = buildPath(workDir, stem ~ ".d");
         immutable dylibPath = buildPath(workDir, stem ~ sharedLibraryExtension());
@@ -509,19 +557,11 @@ public:
                 write(buildPath(workDir, "last-module.d"),
                       asModule(source, modName));
         }
-        // Sources/objects are never kept. A loaded DLL cannot be deleted on
-        // Windows, so its path is retained until the next unload()/destructor;
-        // POSIX could unlink it immediately, but the same rule keeps both
-        // platforms on one code path.
         scope(exit)
         {
             if (exists(srcPath)) remove(srcPath);
             if (modSrcPath.length && exists(modSrcPath)) remove(modSrcPath);
             if (exists(objPath)) remove(objPath);
-            // Keep a failed plugin too when debugging script loading.
-            if (!lib.loaded && exists(dylibPath) &&
-                "DCAD_KEEP_SCRIPTS" !in environment)
-                remove(dylibPath);
         }
 
         auto compiler = compilerExecutable(repoRoot);
@@ -544,7 +584,7 @@ public:
                 immutable toolBin = dirName(compiler);
                 immutable bundledLinker = buildPath(toolBin, "lld-link.exe");
                 if (!exists(bundledLinker))
-                    return RunResult(null,
+                    return PreparedPlugin(null, false,
                         "bundled ldc2 is missing lld-link.exe");
                 cmd ~= "--linker=lld-link";
                 immutable toolLib = buildPath(repoRoot, "toolchain", "lib");
@@ -604,16 +644,19 @@ public:
         try
             compiled = execute(cmd, childEnv, childConfig);
         catch (ProcessException e)
-            return RunResult(null, "cannot start ldc2: " ~ e.msg);
+            return PreparedPlugin(null, false, "cannot start ldc2: " ~ e.msg);
         catch (Exception e)
-            return RunResult(null, "script compiler failed: " ~ e.msg);
+            return PreparedPlugin(null, false,
+                                  "script compiler failed: " ~ e.msg);
         if (compiled.status != 0)
         {
             string msg = compiled.output.length ? compiled.output : "ldc2 failed";
-            return RunResult(null, msg);
+            if (exists(dylibPath) && "DCAD_KEEP_SCRIPTS" !in environment)
+                remove(dylibPath);
+            return PreparedPlugin(null, false, msg);
         }
 
-        return loadPlugin(dylibPath, true);
+        return PreparedPlugin(dylibPath, true, null);
     }
 
     /// True when the loaded script exported at least one animation part.

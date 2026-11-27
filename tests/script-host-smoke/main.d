@@ -228,9 +228,9 @@ int main(string[] args)
         stderr.writeln("new project overwrote a non-empty directory");
         return 1;
     }
-    foreach (name; [".dcad.toml", ".dcad/config.toml", ".dcad/history.jsonl",
+    foreach (name; [".dcad/config.toml", ".dcad/history.jsonl",
                     ".dcad/patches/.keep", "README.md", "main.d",
-                    "dimensions.d", "daimochi_util.d", "part_a.d", "part_b.d",
+                    "dimensions.d", "utils.d", "part_a.d", "part_b.d",
                     "key.d", "motion.d"])
         if (!exists(buildPath(project.root, name)))
         {
@@ -242,23 +242,29 @@ int main(string[] args)
         stderr.writeln("new project has no patches directory");
         return 1;
     }
-    if (!canFind(readText(buildPath(project.root, ".dcad", "config.toml")),
-                 "entry = \"main.d\""))
+    foreach (legacy; [".dcad.toml", "dcad.toml", "dcad.json"])
+        if (exists(buildPath(project.root, legacy)))
+        {
+            stderr.writeln("new project has a legacy root manifest: ", legacy);
+            return 1;
+        }
+    immutable configText = readText(buildPath(project.root, ".dcad",
+                                              "config.toml"));
+    if (!canFind(configText, "entry = \"main.d\"") ||
+        !canFind(configText, "name = \"my-new-project\""))
     {
-        stderr.writeln("new project config does not identify the entry");
+        stderr.writeln("new project config does not describe the directory");
         return 1;
     }
 
     // The canonical config is the project root: opening the directory, the
-    // config itself, the legacy marker or a source file must all resolve to
-    // the same name and entry.
+    // config itself or a source file must all resolve to the directory name.
     foreach (candidate; [project.root,
                          buildPath(project.root, ".dcad", "config.toml"),
-                         buildPath(project.root, ".dcad.toml"),
                          project.entryPath])
     {
         auto opened = Project.open(candidate);
-        if (opened.name != "Daimochi-tsugi" || opened.entry != "main.d")
+        if (opened.name != "my-new-project" || opened.entry != "main.d")
         {
             stderr.writeln("project marker failed for ", candidate, ": ",
                            opened.name, " / ", opened.entry);

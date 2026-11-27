@@ -8,7 +8,7 @@
 module part_b;
 
 import dcad.shape : Shape;
-import daimochi_util : block, unionAll;
+import utils : block, unionAll;
 
 Shape build()
 {

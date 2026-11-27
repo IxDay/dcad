@@ -8,7 +8,7 @@
 module key;
 
 import dcad.shape : Shape;
-import daimochi_util : block;
+import utils : block;
 
 Shape build()
 {

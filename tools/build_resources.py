@@ -31,8 +31,9 @@ MACOS = sys.platform == "darwin"
 def add_tree(zf, source, prefix, written=None):
     """Store files from a directory tree under `prefix`.
 
-    Dotfiles are included: `.dcad.toml` is the project-root marker. Hidden
-    directories remain excluded so build caches never enter the payload.
+    Dotfiles are included: `.dcad/config.toml` is the project-root marker.
+    Hidden directories stay excluded except `.dcad`, so build caches never
+    enter the payload.
     """
     if not source.exists():
         return
@@ -40,7 +41,7 @@ def add_tree(zf, source, prefix, written=None):
         if not path.is_file():
             continue
         parts = path.relative_to(source).parts
-        if any(p.startswith(".") for p in parts[:-1]):
+        if any(p.startswith(".") and p != ".dcad" for p in parts[:-1]):
             continue
         name = prefix + "/" + "/".join(parts)
         if written is not None:

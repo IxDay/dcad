@@ -152,12 +152,13 @@ sources whose root is marked by `.dcad/config.toml` (legacy `.dcad.toml`,
 [daimochi-tsugi](https://ixday.github.io/carpentry/#daimochi-tsugi) joint from
 `project-template/daimochi` directly into the chosen directory, which becomes
 the project root, so the Explorer shows the source decomposition immediately.
-The new project includes `.dcad/config.toml`, an
-empty `.dcad/history.jsonl` and `.dcad/patches/`. The config's `name` is
-optional; when omitted it is the project directory's name. The Agent tab stores
-its transcript in the same `.dcad/` directory and keeps API credentials in
-`.dcad/config.toml`. See [`gui/README.md`](gui/README.md) for controls and the
-execution-model tradeoff.
+The only hidden entry at the root is `.dcad/`, containing `config.toml`, an
+empty `history.jsonl` and `patches/`. The generated config's `name` is the
+chosen directory's name; older configs without a `name` still fall back to the
+directory name. Opening or creating a project shows a modal loading bar while
+the script compiles. The Agent tab stores its transcript in the same `.dcad/`
+directory and keeps API credentials in `.dcad/config.toml`. See
+[`gui/README.md`](gui/README.md) for controls and the execution-model tradeoff.
 
 ## Samples
 

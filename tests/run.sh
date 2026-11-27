@@ -72,7 +72,7 @@ if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
             esac
         done
     fi
-    test -f "$ROOT/project-template/daimochi/.dcad.toml"
+    test -f "$ROOT/project-template/daimochi/.dcad/config.toml"
     test -f "$ROOT/libdcad.a" || test -f "$ROOT/dcad.lib"
     test -d "$ROOT/assets/icons"
     test -s "$ROOT/assets/icons/refresh.png"

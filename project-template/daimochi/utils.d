@@ -5,7 +5,7 @@
  * gp_Trsf, and a part is the sequential fuse of its blocks. Keeping the helper
  * local makes the geometry files read as data, not as kernel plumbing.
  */
-module daimochi_util;
+module utils;
 
 import std.string : toStringz;
 import dcad.shape : Shape, checkOcct;

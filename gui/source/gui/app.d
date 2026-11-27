@@ -16,7 +16,10 @@ import std.string : toStringz, fromStringz, format, startsWith, endsWith, strip;
 import std.algorithm.sorting : sort;
 import std.array : array;
 import std.conv : to;
+import std.math : cos;
 import std.process : environment;
+import core.thread.osthread : Thread;
+import core.time : dur;
 
 import gui.agent : AgentBridge, AgentRole, bigPickleModel,
                    defaultAgentBaseURL;
@@ -35,7 +38,7 @@ import gui.imgui;
 import gui.lsp.bridge : DLspBridge, LspSnapshot;
 import gui.lsp.protocol : LspDiagnostic;
 import gui.viewport : Viewport, ShaderMode;
-import gui.script_host : ScriptHost, RunResult;
+import gui.script_host : ScriptHost, RunResult, PreparedPlugin;
 
 import dcad.shape : Shape;
 
@@ -44,18 +47,19 @@ import dcad.shape : Shape;
 // it dispatches through a short-lived delegate installed for the session.
 private Viewport g_menuViewport;
 private void delegate() g_newProjectAction;
+private bool g_projectLoading;
 
 extern(C) void dcad_shader_menu_callback(int mode)
 {
-    if (g_menuViewport is null) return;
+    if (g_projectLoading || g_menuViewport is null) return;
     g_menuViewport.setShaderMode(mode == 1 ? ShaderMode.wood
                                            : ShaderMode.vscodeYellow);
 }
 
 extern(C) void dcad_new_project_callback()
 {
-    if (g_newProjectAction !is null)
-        g_newProjectAction();
+    if (g_projectLoading || g_newProjectAction is null) return;
+    g_newProjectAction();
 }
 
 // Startup opens a real project from the launch directory or the first-run
@@ -213,6 +217,32 @@ private struct FileEntry
     bool isDir;
 }
 
+/// Runs the first script compile off the UI thread so a loading modal can be
+/// drawn while ldc2 and the plugin entry point are busy.
+private final class ScriptLoadState
+{
+    ScriptHost host;
+    string source;
+    string pluginBase;
+    PreparedPlugin prepared;
+    string error;
+
+    this(ScriptHost host, string source, string pluginBase)
+    {
+        this.host = host;
+        this.source = source.idup;
+        this.pluginBase = pluginBase.idup;
+    }
+
+    void run()
+    {
+        try
+            prepared = host.prepare(source, pluginBase);
+        catch (Throwable e)
+            error = e.msg.idup;
+    }
+}
+
 private FileIcon fileIcon(string name)
 {
     switch (extension(name))
@@ -349,7 +379,11 @@ void main(string[] args)
 
     // Size to the monitor so a 120-character editor still leaves a useful
     // preview pane. The window stays smaller than the screen on small displays.
-    auto mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+    // A display can disappear while the process starts (sleep/wake, headless
+    // sessions). GLFW's macOS backend dereferences the monitor here, so check
+    // it before asking for its mode.
+    auto primaryMonitor = glfwGetPrimaryMonitor();
+    auto mode = primaryMonitor is null ? null : glfwGetVideoMode(primaryMonitor);
     int windowW = 1440;
     int windowH = 900;
     if (mode !is null)
@@ -474,13 +508,6 @@ void main(string[] args)
     auto host = new ScriptHost(workDir, root, project.root);
     auto viewport = new Viewport();
     scope(exit) viewport.dispose(); // context is still current at scope exit
-
-    g_menuViewport = viewport;
-    scope(exit) g_menuViewport = null;
-    auto native = nativeHandles(cast(void*) window);
-    dcad_install_native_menu(native.window, native.display,
-                             &dcad_shader_menu_callback,
-                             &dcad_new_project_callback);
 
     // Open a real project file, so the tab name is always truthful and Save
     // never needs a hidden scratch destination.
@@ -693,16 +720,8 @@ void main(string[] args)
             ? cast(double) animSteps / animFps : 1.0;
     }
 
-    void doRunScript()
+    void applyRunResult(RunResult result)
     {
-        import std.string : fromStringz;
-        auto src = fromStringz(dcad_textedit_get_text(editor)).idup;
-        RunResult result;
-        try
-            result = host.runPrecompiled(
-                src, precompiledBase(root, projectRoot, currentFile));
-        catch (Exception e)
-            result = RunResult(null, "script host failed: " ~ e.msg);
         if (result.ok())
         {
             currentShape = result.shape;
@@ -742,8 +761,101 @@ void main(string[] args)
         }
     }
 
-    // Initial run so the viewport is not empty on startup.
-    doRunScript();
+    RunResult compileScript(string src)
+    {
+        try
+            return host.runPrecompiled(
+                src, precompiledBase(root, projectRoot, currentFile));
+        catch (Exception e)
+            return RunResult(null, "script host failed: " ~ e.msg);
+    }
+
+    void doRunScript()
+    {
+        auto src = fromStringz(dcad_textedit_get_text(editor)).idup;
+        applyRunResult(compileScript(src));
+    }
+
+    /// Compile the open project on a worker while a modal loading bar is drawn.
+    /// The GL context and ImGui stay on this thread; the worker only prepares a
+    /// plugin, and the main thread loads it and uploads the resulting mesh.
+    void runWithLoading()
+    {
+        // Menu callbacks use the same script host; ignore them until the
+        // worker has handed its plugin back to this thread.
+        g_projectLoading = true;
+        scope(exit) g_projectLoading = false;
+        auto src = fromStringz(dcad_textedit_get_text(editor)).idup;
+        auto loaderState = new ScriptLoadState(
+            host, src, precompiledBase(root, projectRoot, currentFile));
+        auto loader = new Thread(&loaderState.run);
+        loader.start();
+        scope (exit) if (loader.isRunning) loader.join(false);
+
+        immutable started = glfwGetTime();
+        enum int loadingFlags = windowFlagsNoResize | windowFlagsNoMove |
+                                windowFlagsNoSavedSettings |
+                                windowFlagsNoDocking;
+        while (loader.isRunning)
+        {
+            dcad_native_menu_poll();
+            glfwPollEvents();
+            refreshUiScale(window);
+            if (glfwWindowShouldClose(window))
+                break;
+
+            dcad_gui_new_frame();
+            float vw, vh;
+            dcad_gui_get_viewport_size(&vw, &vh);
+            immutable boxW = px(420);
+            immutable boxH = px(150);
+            dcad_gui_set_next_window_pos(vw / 2 - boxW / 2,
+                                         vh / 2 - boxH / 2, condAlways);
+            dcad_gui_set_next_window_size(boxW, boxH, condAlways);
+            if (dcad_gui_begin("Loading project", loadingFlags))
+            {
+                auto label = "Loading " ~ baseName(project.entry) ~ "...";
+                dcad_gui_spacing();
+                dcad_gui_text(label.toStringz);
+                dcad_gui_spacing();
+                immutable elapsed = cast(float)(glfwGetTime() - started);
+                immutable fraction = 0.5f - 0.45f * cos(elapsed * 3.0f);
+                dcad_gui_progress_bar(fraction, 0f, px(22),
+                                      "Compiling sources".toStringz);
+                dcad_gui_spacing();
+                dcad_gui_text_wrapped(
+                    "Preparing the script and 3D preview.".toStringz);
+            }
+            dcad_gui_end();
+            dcad_gui_render();
+            glfwSwapBuffers(window);
+            Thread.sleep(dur!"msecs"(8));
+        }
+        loader.join();
+        if (loaderState.error.length)
+            applyRunResult(RunResult(null,
+                                     "script host failed: " ~ loaderState.error));
+        else
+        {
+            try
+                applyRunResult(host.runPrepared(loaderState.prepared, src));
+            catch (Exception e)
+                applyRunResult(RunResult(null, "script host failed: " ~ e.msg));
+        }
+        lastFrameTime = glfwGetTime();
+    }
+
+    // Initial run so the viewport is not empty on startup. The loading modal
+    // covers the compile; the native menu is installed afterwards so no menu
+    // callback can mutate ScriptHost while the worker owns it.
+    runWithLoading();
+
+    g_menuViewport = viewport;
+    scope(exit) g_menuViewport = null;
+    auto native = nativeHandles(cast(void*) window);
+    dcad_install_native_menu(native.window, native.display,
+                             &dcad_shader_menu_callback,
+                             &dcad_new_project_callback);
 
     /// File > New Project: choose the project directory, scaffold the daimochi
     /// sample into it from the embedded template, switch the host to it and
@@ -772,7 +884,7 @@ void main(string[] args)
             lsp.start(created.root);
             lsp.openDocument(created.entry, createdText);
             updateTitle();
-            doRunScript();
+            runWithLoading();
             status = "Created " ~ created.root
                    ~ (usedFallback ? " (folder picker unavailable)" : "");
         }

@@ -152,19 +152,26 @@ struct Project
         {
             if (!item.isFile) continue;
             auto name = baseName(item.name);
-            // Keep dotfiles such as .dcad.toml as well as normal sources.
+            // Generated projects use only `.dcad/config.toml`. Never copy a
+            // legacy root manifest from an older template into a new project.
+            if (legacyManifestNames.canFind(name)) continue;
             if (!extension(name).length && !name.startsWith(".")) continue;
             write(buildPath(target, name), readText(item.name));
         }
 
+        // Read the template's metadata without copying its identity: a new
+        // project is named after the directory the user chose.
+        Project scaffold;
+        immutable templateConfig = projectConfigPath(source);
+        if (exists(templateConfig)) scaffold.readManifest(templateConfig);
         Project result;
         result.root = target;
-        immutable marker = buildPath(target, legacyManifestNames[0]);
-        enforce(exists(marker), "project template is missing " ~ marker);
-        result.readManifest(marker);
-        if (!result.name.length)
-            result.name = baseName(target);
+        result.name = baseName(target);
+        result.entry = scaffold.entry.length ? scaffold.entry : "main.d";
+        result.description = scaffold.description;
         result.writeConfigIfMissing();
+        enforce(exists(result.entryPath),
+                "project template is missing entry: " ~ result.entry);
         return result;
     }
 

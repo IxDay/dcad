@@ -6,7 +6,7 @@
  */
 module motion;
 
-import daimochi_util : NamedPart, moved;
+import utils : NamedPart, moved;
 
 alias Pose = double[3][string];
 

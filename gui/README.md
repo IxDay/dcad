@@ -58,7 +58,9 @@ whether to open an existing project or create a new one; no sample is opened
 implicitly. You can also pass a project directory, `.dcad/config.toml` or a `.d`
 file to `dcad-gui` on the command line. **File > New Project...** (Cmd/Ctrl+N) scaffolds
 the three-piece joint directly into the folder you choose, which becomes the
-project root, and opens `main.d`, so the Explorer shows the sample's layout.
+project root and the project name, and opens `main.d`, so the Explorer shows the
+sample's layout. Loading a project shows a modal progress bar while its script
+compiles, without freezing the window.
 `samples/coffee-table` is a real project with `.dcad.toml` and `table.d` as its
 entry point, so it can be selected in the open dialog to test the full animated
 assembly. **Save** always writes the open file in that directory. Each
@@ -82,7 +84,7 @@ commands, which refresh the open editor after a change is applied or restored.
 
 Agent history belongs to the project: every created or bare opened project gets
 a `.dcad/` directory containing `config.toml` (the canonical project marker),
-`history.jsonl`, and, after a model edit, reversible patches in `.dcad/patches/`.
+an empty `history.jsonl`, and `patches/` for reversible model edits.
 The config's `name` is optional and defaults to the directory name. API
 credentials are dcad-owned and stay in that project config; `/auth` preserves
 the project metadata, and the installed OpenCode auth store is not read. Free

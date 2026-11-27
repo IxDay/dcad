@@ -7,7 +7,7 @@
 module daimochi_main;
 
 import dcad.shape : Shape;
-import daimochi_util : NamedPart, compound;
+import utils : NamedPart, compound;
 import dimensions;
 import motion : allPoses, posedParts;
 import part_a : makePartA = build;
