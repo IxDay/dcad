@@ -60,6 +60,38 @@ def copy_launcher(source, target):
     os.chmod(target, 0o755)
 
 
+# Thin/fat Mach-O magics, little- and big-endian. Signing only the GUI and a
+# known dylib directory leaves the bundled compiler/tools unsigned, which macOS
+# refuses to execute on Apple Silicon even after the quarantine flag is gone.
+MACHO_MAGICS = (
+    b"\xcf\xfa\xed\xfe", b"\xfe\xed\xfa\xcf",
+    b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xce",
+    b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca",
+)
+
+
+def mach_o_files(root):
+    """Return every Mach-O inside root, deepest paths first for signing."""
+    found = []
+    for path in root.rglob("*"):
+        if not path.is_file() or path.is_symlink():
+            continue
+        try:
+            with path.open("rb") as stream:
+                if stream.read(4) not in MACHO_MAGICS:
+                    continue
+        except OSError:
+            continue
+        found.append(path)
+    return sorted(found, key=lambda p: len(p.parts), reverse=True)
+
+
+def ad_hoc_sign(codesign, path):
+    quiet = dict(check=True, stdout=subprocess.DEVNULL,
+                 stderr=subprocess.DEVNULL)
+    subprocess.run([codesign, "--force", "--sign", "-", str(path)], **quiet)
+
+
 def package_macos(target_dir, launcher, version):
     """Build the .app around the real GUI, not the self-extracting launcher.
 
@@ -94,23 +126,30 @@ def package_macos(target_dir, launcher, version):
     (contents / "Info.plist").write_text(
         PLIST.format(version=html.escape(version)), encoding="utf-8")
 
-    # Ad-hoc signing avoids an invalid signature after copying the binary;
-    # Gatekeeper may still ask first-time users to right-click and Open.
+    # A free Apple account cannot issue Developer ID certificates or notarize,
+    # so ad-hoc sign every executable in the bundle. Apple Silicon refuses to
+    # run unsigned arm64 code even when the download has no quarantine flag.
     codesign = shutil.which("codesign")
-    if codesign:
-        quiet = dict(check=False, stdout=subprocess.DEVNULL,
-                     stderr=subprocess.DEVNULL)
-        subprocess.run([codesign, "--force", "--deep", "--sign", "-", str(app)],
-                       **quiet)
-        # codesign --deep leaves the relocated dylibs with a signature dyld
-        # rejects when a script plugin dlopens them (SIGKILL, "Invalid Page").
-        # Signing each Mach-O individually first fixes that; then seal the app
-        # without --deep so the nested signatures stay intact.
-        for macho in [macos / "dcad-gui"] + sorted(
-                (resources / "lib").glob("*.dylib")):
-            subprocess.run([codesign, "--force", "--sign", "-", str(macho)],
-                           **quiet)
-        subprocess.run([codesign, "--force", "--sign", "-", str(app)], **quiet)
+    if not codesign:
+        raise SystemExit("codesign is required to package dcad.app")
+    machos = mach_o_files(app)
+    if macos / "dcad-gui" not in machos:
+        raise SystemExit("GUI binary was not detected as Mach-O")
+    for path in machos:
+        ad_hoc_sign(codesign, path)
+    ad_hoc_sign(codesign, app)
+
+    # Fail the pipeline rather than shipping a bundle dyld will kill at
+    # dlopen/exec time. Loose compiler tools are verified individually because
+    # `codesign --deep` only checks nested bundle code.
+    for path in machos:
+        subprocess.run([codesign, "--verify", "--strict", str(path)],
+                       check=True, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL)
+    subprocess.run([codesign, "--verify", "--deep", "--strict", str(app)],
+                   check=True, stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL)
+    print(f"  ad-hoc signed and verified {len(machos)} Mach-O files")
     return macos / "dcad-gui"
 
 

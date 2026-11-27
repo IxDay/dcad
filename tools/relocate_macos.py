@@ -51,9 +51,13 @@ def main():
         if rpath not in present:
             subprocess.run(["install_name_tool", "-add_rpath", rpath,
                             str(binary)], check=False)
+    # install_name_tool invalidates any existing signature. Apple Silicon will
+    # refuse to execute an unsigned GUI, so make signing failures build errors.
     if shutil.which("codesign"):
         subprocess.run(["codesign", "--force", "--sign", "-", str(binary)],
-                       check=False)
+                       check=True)
+    else:
+        raise SystemExit("codesign is required to relocate the macOS GUI")
 
 
 if __name__ == "__main__":

@@ -76,9 +76,14 @@ the rolling `0.1.0` marker: each update deletes the previous release and
 force-pushes `0.1.0` to the validated commit instead of creating a new version.
 
 The macOS archive contains `dcad.app` with the real GUI and its resources inside
-`Contents/`, so Finder opens the application directly instead of Terminal. It is
-signed ad hoc; first-time downloads may still need right-click > Open. The
-Windows launcher is built with the GUI subsystem and a WinMain entry point, and
+`Contents/`, so Finder opens the application directly instead of Terminal. Every
+Mach-O in the bundle is ad-hoc signed — unsigned arm64 code will not run on Apple
+Silicon even without quarantine. A free Apple account cannot issue a Developer
+ID certificate or notarize the app, so Gatekeeper still warns on first launch.
+On macOS Sequoia, open the app once, then go to System Settings → Privacy &
+Security and click **Open Anyway**. If that still refuses, remove the download's
+quarantine attribute in Terminal: `xattr -dr com.apple.quarantine /path/to/dcad.app`.
+The Windows launcher is built with the GUI subsystem and a WinMain entry point, and
 starts the embedded GUI with `CREATE_NO_WINDOW`, so no console window appears;
 its diagnostics go to `gui.log` in the extracted cache and fatal errors use a
 message box. The Linux archive includes a `Terminal=false` desktop entry for
