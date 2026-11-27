@@ -122,17 +122,32 @@ struct Project
         return result;
     }
 
-    /// Copy the bundled template into `target`. The target must not exist.
+    /// Copy the bundled template into `target`. The target must be a new or
+    /// empty directory; an existing project is never overwritten.
     static Project create(string target, string templateRoot)
     {
         import std.exception : enforce;
 
         target = absolutePath(target);
-        enforce(!exists(target), "project directory already exists: " ~ target);
+        if (exists(target))
+        {
+            enforce(isDir(target), "project path is not a directory: " ~ target);
+            // The selected folder becomes the project root. Accept an already
+            // created empty folder, but never overwrite an existing project.
+            bool empty = true;
+            foreach (entry; dirEntries(target, SpanMode.shallow))
+            {
+                if (baseName(entry.name) == ".DS_Store") continue;
+                empty = false;
+                break;
+            }
+            enforce(empty, "project directory is not empty: " ~ target);
+        }
+        else
+            mkdirRecurse(target);
+
         immutable source = buildPath(templateRoot, "project-template", "daimochi");
         enforce(exists(source), "project template is missing: " ~ source);
-
-        mkdirRecurse(target);
         foreach (item; dirEntries(source, SpanMode.shallow))
         {
             if (!item.isFile) continue;
@@ -320,13 +335,20 @@ string uniqueProjectPath(string parent, string baseName_)
     return candidate;
 }
 
-/// New projects always live in a `daimochi-tsugi` child of the chosen parent.
-/// The parent itself is never used as the project root, so choosing an empty
-/// folder cannot scatter the scaffold across its top level.
-string newProjectPath(string parent)
+/// The folder chosen in the new-project picker is the project root. The sample
+/// sources are copied directly into it so the Explorer immediately shows the
+/// file decomposition and animation modules.
+string newProjectRoot(string chosen)
 {
-    if (parent.length) mkdirRecurse(parent);
-    return uniqueProjectPath(parent, "daimochi-tsugi");
+    return absolutePath(chosen);
+}
+
+/// Last-resort project root used when no folder picker is available. Give the
+/// generated project its own directory under the fallback parent instead of
+/// scattering template files into a shared location.
+string fallbackProjectRoot()
+{
+    return uniqueProjectPath(fallbackProjectParent(), "daimochi-tsugi");
 }
 
 /// Choice presented by the native first-run modal. No project is opened by

@@ -26,7 +26,7 @@ import gui.agentcore.native_transport : AgentNativeTransport;
 import gui.platform : processId, nativeHandles, resourceRoot;
 import gui.project : Project, ProjectChoice, askProjectChoice,
                      chooseExistingProject, chooseProjectParent,
-                     fallbackProjectParent, newProjectPath;
+                     fallbackProjectRoot, newProjectRoot;
 
 import bindbc.glfw;
 import bindbc.opengl;
@@ -251,17 +251,16 @@ void main(string[] args)
     }
 
     // Project handler: `dcad-gui <project-dir|.dcad.toml|source.d>` opens a
-    // project, while `--new-project <parent-dir>` scaffolds the daimochi
-    // sample. With no argument, a project in the launch directory is opened;
-    // otherwise a native modal offers Open Existing / Create New. No sample
-    // project is opened implicitly.
+    // project, while `--new-project <project-dir>` scaffolds the daimochi
+    // sample directly into that directory. With no argument, a project in the
+    // launch directory is opened; otherwise a native modal offers Open
+    // Existing / Create New. No sample project is opened implicitly.
     Project project;
     immutable explicitArg = args.length > 1;
     if (explicitArg && args[1] == "--new-project")
     {
-        immutable parent = args.length > 2 ? args[2]
-                                           : fallbackProjectParent();
-        immutable target = newProjectPath(parent);
+        immutable target = args.length > 2
+            ? newProjectRoot(args[2]) : fallbackProjectRoot();
         try
             project = Project.create(target, root);
         catch (Exception e)
@@ -306,10 +305,11 @@ void main(string[] args)
             }
             case ProjectChoice.createNew:
             {
-                auto parent = chooseProjectParent();
-                if (parent is null) parent = fallbackProjectParent();
+                auto chosen = chooseProjectParent();
+                immutable target = chosen is null
+                    ? fallbackProjectRoot() : newProjectRoot(chosen);
                 try
-                    project = Project.create(newProjectPath(parent), root);
+                    project = Project.create(target, root);
                 catch (Exception e)
                     stderr.writeln("new project failed: ", e.msg);
                 break;
@@ -745,21 +745,19 @@ void main(string[] args)
     // Initial run so the viewport is not empty on startup.
     doRunScript();
 
-    /// File > New Project: choose a parent directory, scaffold the daimochi
-    /// sample from the embedded template, switch the host to it and rebuild.
+    /// File > New Project: choose the project directory, scaffold the daimochi
+    /// sample into it from the embedded template, switch the host to it and
+    /// rebuild. The chosen directory is the project root.
     void createNewProject()
     {
-        bool usedFallback = false;
-        auto parent = chooseProjectParent();
-        if (parent is null)
-        {
-            parent = fallbackProjectParent();
-            usedFallback = true;
-        }
+        auto chosen = chooseProjectParent();
+        immutable usedFallback = chosen is null;
+        immutable target = usedFallback
+            ? fallbackProjectRoot() : newProjectRoot(chosen);
 
         try
         {
-            auto created = Project.create(newProjectPath(parent), root);
+            auto created = Project.create(target, root);
             destroy(host);
             host = new ScriptHost(workDir, root, created.root);
             project = created;

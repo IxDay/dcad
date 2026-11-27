@@ -147,11 +147,12 @@ element in `samples/coffee-table/`.
 `dcad-gui <directory|.dcad/config.toml|file.d>` opens a plain directory of D
 sources whose root is marked by `.dcad/config.toml` (legacy `.dcad.toml`,
 `dcad.toml` and `dcad.json` still work, and a bare directory is promoted), and
-`dcad-gui --new-project <parent-directory>`
-(or **File > New Project...**) creates a `daimochi-tsugi` subdirectory inside
-the chosen directory and scaffolds the CC BY 4.0
+`dcad-gui --new-project <project-directory>`
+(or **File > New Project...**) scaffolds the CC BY 4.0
 [daimochi-tsugi](https://ixday.github.io/carpentry/#daimochi-tsugi) joint from
-`project-template/daimochi`. The new project includes `.dcad/config.toml`, an
+`project-template/daimochi` directly into the chosen directory, which becomes
+the project root, so the Explorer shows the source decomposition immediately.
+The new project includes `.dcad/config.toml`, an
 empty `.dcad/history.jsonl` and `.dcad/patches/`. The config's `name` is
 optional; when omitted it is the project directory's name. The Agent tab stores
 its transcript in the same `.dcad/` directory and keeps API credentials in

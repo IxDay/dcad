@@ -13,7 +13,7 @@ import std.algorithm : startsWith;
 import std.algorithm.searching : canFind;
 import std.file : append, exists, isDir, readText, mkdirRecurse, tempDir, getcwd,
                   chdir, copy, write;
-import std.path : baseName, buildPath, dirName;
+import std.path : absolutePath, baseName, buildPath;
 import std.process : environment;
 import std.conv : to;
 import std.json : JSONType, JSONValue, parseJSON;
@@ -42,7 +42,7 @@ import gui.lsp.protocol : LspFrameReader, encodeLspMessage,
                           lspNotification, lspPathToURI, lspResponse,
                           parseLspCompletions, parseLspDiagnostics;
 import gui.platform : processId, resourceRoot, sharedLibraryExtension;
-import gui.project : Project, newProjectPath;
+import gui.project : Project, newProjectRoot;
 import gui.script_host : ScriptHost;
 
 int main(string[] args)
@@ -198,16 +198,36 @@ int main(string[] args)
 
     // File > New Project uses the same template; check it compiles and
     // exposes the three joints expected by the parts overlay.
-    immutable projectParent = buildPath(workDir, "new-project-parent");
-    immutable projectDir = newProjectPath(projectParent);
-    if (baseName(projectDir) != "daimochi-tsugi" ||
-        dirName(projectDir) != projectParent)
+    // The folder chosen in the native picker is the project root itself.
+    immutable projectDir = buildPath(workDir, "my-new-project");
+    mkdirRecurse(projectDir);
+    immutable target = newProjectRoot(projectDir);
+    if (target != absolutePath(projectDir))
     {
-        stderr.writeln("new project was not created in a daimochi-tsugi child: ",
-                       projectDir);
+        stderr.writeln("new project root was replaced with a child: ", target);
         return 1;
     }
-    auto project = Project.create(projectDir, root);
+    auto project = Project.create(target, root);
+    if (exists(buildPath(project.root, "daimochi-tsugi")))
+    {
+        stderr.writeln("new project contains a nested daimochi-tsugi folder");
+        return 1;
+    }
+
+    // A folder that already has content is never used as a fresh project.
+    immutable occupied = buildPath(workDir, "occupied-project-dir");
+    mkdirRecurse(occupied);
+    write(buildPath(occupied, "keep.txt"), "keep");
+    bool rejectedOccupied = false;
+    try
+        Project.create(occupied, root);
+    catch (Exception)
+        rejectedOccupied = true;
+    if (!rejectedOccupied)
+    {
+        stderr.writeln("new project overwrote a non-empty directory");
+        return 1;
+    }
     foreach (name; [".dcad.toml", ".dcad/config.toml", ".dcad/history.jsonl",
                     ".dcad/patches/.keep", "README.md", "main.d",
                     "dimensions.d", "daimochi_util.d", "part_a.d", "part_b.d",
