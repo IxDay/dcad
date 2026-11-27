@@ -10,14 +10,16 @@ module gui.app;
 
 import std.stdio : stderr, writeln;
 import std.file : mkdirRecurse, exists, readText, write, dirEntries, SpanMode, isDir, tempDir;
-import std.path : buildPath, baseName, dirName, extension;
-import std.string : toStringz, format, startsWith, endsWith;
+import std.path : absolutePath, buildPath, baseName, dirName, extension;
+import std.string : toStringz, fromStringz, format, startsWith, endsWith, strip;
 import std.algorithm.sorting : sort;
 import std.array : array;
 import std.conv : to;
 import std.process : environment;
 
-import gui.agent : AgentBridge, AgentRole;
+import gui.agent : AgentBridge, AgentRole, bigPickleModel,
+                   defaultAgentBaseURL;
+import gui.agentcore.native_transport : AgentNativeTransport;
 import gui.platform : processId, nativeHandles, resourceRoot;
 import gui.project : Project, chooseProjectParent, fallbackProjectParent,
                      uniqueProjectPath;
@@ -26,6 +28,8 @@ import bindbc.glfw;
 import bindbc.opengl;
 
 import gui.imgui;
+import gui.lsp.bridge : DLspBridge, LspSnapshot;
+import gui.lsp.protocol : LspDiagnostic;
 import gui.viewport : Viewport, ShaderMode;
 import gui.script_host : ScriptHost, RunResult;
 
@@ -64,6 +68,42 @@ private float iconSize = iconSizeBase;
 private float px(float value)
 {
     return value * uiScale;
+}
+
+/// ImGui owns fixed buffers while a field is active; copy without reallocating.
+private void fillTextBuffer(char[] buffer, string text)
+{
+    buffer[] = '\0';
+    immutable limit = text.length < buffer.length - 1
+        ? text.length : buffer.length - 1;
+    foreach (index; 0 .. limit) buffer[index] = text[index];
+}
+
+private string oneLine(string text)
+{
+    string result;
+    foreach (ch; text)
+        result ~= (ch == '\r' || ch == '\n' || ch == '\t') ? ' ' : ch;
+    return result;
+}
+
+/// TextEditor markers use one `line<TAB>message` record per line.
+private string lspMarkerText(LspDiagnostic[] diagnostics, string projectRoot,
+                             string activeFile)
+{
+    if (!activeFile.length) return "";
+    immutable activePath = absolutePath(buildPath(projectRoot, activeFile));
+    string result;
+    size_t count;
+    foreach (diagnostic; diagnostics)
+    {
+        if (absolutePath(diagnostic.path) != activePath) continue;
+        result ~= (diagnostic.line + 1).to!string ~ "\t"
+               ~ oneLine(diagnostic.message.length
+                         ? diagnostic.message : "D diagnostic") ~ "\n";
+        if (++count >= 256) break;
+    }
+    return result;
 }
 
 // Split the space left after the sidebar: 3/5 code editor, 2/5 preview.
@@ -230,9 +270,10 @@ void main(string[] args)
     string projectRoot = project.root;
     string currentFile = project.entry;
 
-    // Agent sessions live in the app cache, one per project root. The CLI runs
-    // with projectRoot as its cwd, so tools and credentials are the user's own.
+    // The embedded Big Pickle core owns model calls and project tools. History
+    // belongs to the project; credentials stay in dcad's app cache.
     auto agent = new AgentBridge();
+    agent.useEmbedded(new AgentNativeTransport());
     agent.open(projectRoot, project.name);
     scope(exit)
     {
@@ -351,6 +392,15 @@ void main(string[] args)
     scope(exit) dcad_textedit_free(editor);
     dcad_textedit_set_light_palette(editor);
 
+    // Fixed serve-d bridge. It is fail-soft: without serve-d the compiler
+    // error list below remains the diagnostics channel.
+    auto lsp = new DLspBridge();
+    scope(exit) lsp.shutdown();
+    lsp.start(projectRoot);
+    auto lspText = readText(buildPath(projectRoot, currentFile));
+    lsp.openDocument(currentFile, lspText);
+    LspSnapshot lspSnapshot;
+
     // Hot-load artefacts live in the system temp dir, never in the repo.
     immutable workDir = buildPath(tempDir(), "dcad-gui-" ~ processId.to!string);
     mkdirRecurse(workDir);
@@ -382,6 +432,18 @@ void main(string[] args)
     enum size_t agentPromptCapacity = 8192;
     char[agentPromptCapacity] agentPrompt;
     agentPrompt[] = '\0';
+
+    enum size_t agentKeyCapacity = 512;
+    enum size_t agentURLCapacity = 512;
+    char[agentKeyCapacity] agentKeyBuffer;
+    char[agentURLCapacity] agentURLBuffer;
+    auto startupCredential = agent.credential();
+    fillTextBuffer(agentKeyBuffer, startupCredential.apiKey);
+    fillTextBuffer(agentURLBuffer, startupCredential.baseURL);
+    int showAgentKey;
+    bool showAgentDiff;
+    bool agentConfigChanged;
+
     int currentTab;
     ulong agentRevision = agent.revision;
     bool suppressRun;
@@ -438,8 +500,11 @@ void main(string[] args)
                 {
                     try
                     {
-                        dcad_textedit_set_text(editor, readText(e.path).toStringz);
+                        auto openedText = readText(e.path);
+                        lsp.closeDocument(currentFile);
+                        dcad_textedit_set_text(editor, openedText.toStringz);
                         currentFile = key;
+                        lsp.openDocument(key, openedText);
                         status = "Opened " ~ key;
                         updateTitle();
                     }
@@ -563,8 +628,11 @@ void main(string[] args)
             agent.open(created.root, created.name);
             agentPrompt[] = '\0';
             agentRevision = agent.revision;
-            dcad_textedit_set_text(editor,
-                                   readText(created.entryPath()).toStringz);
+            immutable createdText = readText(created.entryPath());
+            dcad_textedit_set_text(editor, createdText.toStringz);
+            lsp.shutdown();
+            lsp.start(created.root);
+            lsp.openDocument(created.entry, createdText);
             updateTitle();
             doRunScript();
             status = "Created " ~ created.root
@@ -590,6 +658,26 @@ void main(string[] args)
         // CLI output is collected on a reader thread; move it to GUI-owned
         // state before any widget reads the transcript.
         agent.drain();
+        if (agent.consumeEditorRefresh())
+        {
+            bool touchedActiveFile;
+            foreach (file; agent.patchFiles())
+                if (file == currentFile) touchedActiveFile = true;
+            if (touchedActiveFile)
+            {
+                immutable path = buildPath(projectRoot, currentFile);
+                if (exists(path))
+                {
+                    auto refreshed = readText(path);
+                    dcad_textedit_set_text(editor, refreshed.toStringz);
+                    lsp.changeDocument(currentFile, refreshed);
+                }
+            }
+        }
+        lsp.drain(lspSnapshot);
+        immutable markerText = lspMarkerText(lspSnapshot.diagnostics,
+                                             projectRoot, currentFile);
+        dcad_textedit_set_error_markers(editor, markerText.toStringz);
         dcad_gui_new_frame();
 
         // Fixed layout rebuilt every frame: project tree / editor / preview.
@@ -674,11 +762,12 @@ void main(string[] args)
                 dcad_gui_same_line();
                 if (iconButton(iconSave, "Save script"))
                 {
-                    import std.string : fromStringz;
                     if (!currentFile.length)
                         currentFile = project.entry;
                     immutable target = buildPath(projectRoot, currentFile);
-                    write(target, fromStringz(dcad_textedit_get_text(editor)).idup);
+                    auto editorText = fromStringz(dcad_textedit_get_text(editor)).idup;
+                    write(target, editorText);
+                    lsp.saveDocument(currentFile, editorText);
                     status = "Saved " ~ target;
                     updateTitle();
                 }
@@ -693,12 +782,31 @@ void main(string[] args)
                 // long files.
                 float cursorX, cursorY;
                 dcad_gui_get_cursor_screen_pos(&cursorX, &cursorY);
-                immutable bottomReserve = showError ? px(168) : px(64);
+                immutable completionReserve =
+                    lspSnapshot.completions.length ? px(118) : 0;
+                immutable bottomReserve = (showError ? px(168) : px(64))
+                                        + completionReserve;
                 immutable available = (wy + wh - px(8)) - cursorY - bottomReserve;
                 immutable editorH = available > px(80) ? available : px(80);
                 dcad_textedit_render(editor, "##script", ww - px(24), editorH);
 
+                if (dcad_textedit_text_changed(editor) != 0)
+                    lsp.changeDocument(currentFile,
+                        fromStringz(dcad_textedit_get_text(editor)).idup);
+                if (dcad_gui_is_item_active() != 0 &&
+                    dcad_gui_key_chord_pressed(modCtrl | keySpace) != 0)
+                {
+                    int line, column;
+                    dcad_textedit_cursor(editor, &line, &column);
+                    lsp.requestCompletion(currentFile, line, column);
+                }
+
+                dcad_gui_align_text_to_frame_padding();
                 dcad_gui_text_colored(status.toStringz, 0.63f, 0.71f, 0.42f, 1);
+                dcad_gui_same_line();
+                dcad_gui_align_text_to_frame_padding();
+                dcad_gui_text_colored(lspSnapshot.status.toStringz,
+                                      0.40f, 0.40f, 0.40f, 1);
 
                 if (showError && lastError.length)
                 {
@@ -713,6 +821,30 @@ void main(string[] args)
                         dcad_gui_text_wrapped(lastError.toStringz);
                     dcad_gui_end_child();
                 }
+
+                if (lspSnapshot.completions.length)
+                {
+                    dcad_gui_text_colored("D completions".toStringz,
+                                          0.45f, 0.45f, 0.45f, 1);
+                    float listX, listY;
+                    dcad_gui_get_cursor_screen_pos(&listX, &listY);
+                    immutable listRoom = (wy + wh - px(8)) - listY;
+                    if (dcad_gui_begin_child("##completions", 0,
+                            listRoom > px(72) ? listRoom : px(72),
+                            childFlagsBorders))
+                    {
+                        foreach (completion; lspSnapshot.completions[0 .. $])
+                        {
+                            auto label = completion.detail.length
+                                ? completion.label ~ "  " ~ completion.detail
+                                : completion.label;
+                            if (dcad_gui_selectable(label.toStringz, 0) != 0)
+                                dcad_textedit_insert_text(editor,
+                                    completion.insertText.toStringz);
+                        }
+                    }
+                    dcad_gui_end_child();
+                }
             }
             else
             {
@@ -720,15 +852,55 @@ void main(string[] args)
                 // stays on the Code tab.
                 suppressRun = true;
                 auto sessionLabel = agent.sessionId.length
-                    ? "opencode session " ~ agent.sessionId
-                    : "opencode session (new)";
+                    ? "dcad agent session " ~ agent.sessionId
+                    : "dcad agent session (new)";
                 dcad_gui_text_colored(sessionLabel.toStringz,
                                       0.35f, 0.35f, 0.35f, 1);
                 dcad_gui_separator();
 
+                // Credentials stay in dcad's app cache and are never copied
+                // into the project's history or patch files.
+                dcad_gui_align_text_to_frame_padding();
+                dcad_gui_text_colored("API key", 0.45f, 0.45f, 0.45f, 1);
+                dcad_gui_same_line();
+                immutable configFieldW = ww - px(300);
+                if (dcad_gui_input_text("##agent-api-key", agentKeyBuffer.ptr,
+                        cast(int) agentKeyBuffer.length, configFieldW,
+                        (showAgentKey ? 0 : inputTextFlagsPassword) |
+                        inputTextFlagsEnterReturnsTrue) != 0)
+                    agentConfigChanged = true;
+                dcad_gui_same_line();
+                if (dcad_gui_checkbox("##show-agent-key", &showAgentKey) != 0)
+                    dcad_gui_set_item_tooltip("Show API key");
+                dcad_gui_same_line();
+                dcad_gui_align_text_to_frame_padding();
+                if (dcad_gui_button("Save") != 0)
+                {
+                    auto key = fromStringz(agentKeyBuffer.ptr).idup;
+                    auto url = fromStringz(agentURLBuffer.ptr).idup;
+                    agent.saveCredential(key, url.length ? url : defaultAgentBaseURL);
+                    agentConfigChanged = false;
+                    status = "Agent credentials saved";
+                }
+
+                dcad_gui_align_text_to_frame_padding();
+                dcad_gui_text_colored("Base URL", 0.45f, 0.45f, 0.45f, 1);
+                dcad_gui_same_line();
+                if (dcad_gui_input_text("##agent-base-url", agentURLBuffer.ptr,
+                        cast(int) agentURLBuffer.length, configFieldW,
+                        inputTextFlagsEnterReturnsTrue) != 0)
+                    agentConfigChanged = true;
+                dcad_gui_same_line();
+                dcad_gui_align_text_to_frame_padding();
+                dcad_gui_text_colored("Model", 0.45f, 0.45f, 0.45f, 1);
+                dcad_gui_same_line();
+                dcad_gui_text_colored(bigPickleModel, 0.63f, 0.71f, 0.42f, 1);
+                if (agentConfigChanged)
+                    dcad_gui_set_item_tooltip("Press Save to store credentials");
+
                 float cursorX, cursorY;
                 dcad_gui_get_cursor_screen_pos(&cursorX, &cursorY);
-                immutable logReserve = px(140);
+                immutable logReserve = px(190);
                 immutable logRoom = (wy + wh - px(8)) - cursorY - logReserve;
                 if (dcad_gui_begin_child("##agent-log", 0,
                                          logRoom > px(80) ? logRoom : px(80),
@@ -772,6 +944,16 @@ void main(string[] args)
                 }
                 dcad_gui_end_child();
 
+                if (showAgentDiff && agent.hasPatch)
+                {
+                    dcad_gui_spacing();
+                    dcad_gui_text_colored("Staged diff", 0.45f, 0.45f, 0.45f, 1);
+                    if (dcad_gui_begin_child("##agent-diff", 0, px(110),
+                                             childFlagsBorders))
+                        dcad_gui_text_wrapped(agent.patchDiff().toStringz);
+                    dcad_gui_end_child();
+                }
+
                 dcad_gui_spacing();
                 dcad_gui_input_text_multiline("##agent-prompt", agentPrompt.ptr,
                     cast(int) agentPrompt.length, ww - px(24), px(64),
@@ -786,16 +968,52 @@ void main(string[] args)
                     if (dcad_gui_key_chord_pressed(keyEnter) != 0)
                         sendPressed = true;
                 }
+                dcad_gui_begin_disabled(agent.busy ? 1 : 0);
                 if (dcad_gui_button(agent.busy ? "Running..." : "Send") != 0)
                     sendPressed = true;
+                dcad_gui_end_disabled();
+                dcad_gui_same_line();
+                dcad_gui_begin_disabled(agent.busy ? 0 : 1);
+                if (dcad_gui_button("Stop") != 0)
+                    agent.stop();
+                dcad_gui_end_disabled();
+                dcad_gui_same_line();
+                dcad_gui_begin_disabled(agent.hasPatch && !agent.busy ? 0 : 1);
+                if (dcad_gui_button(showAgentDiff ? "Hide diff" : "Diff") != 0)
+                    showAgentDiff = !showAgentDiff;
+                dcad_gui_end_disabled();
+                dcad_gui_same_line();
+                dcad_gui_begin_disabled(agent.hasPatch && !agent.busy ? 0 : 1);
+                if (dcad_gui_button("Keep") != 0)
+                    agent.keepLastChange();
+                dcad_gui_end_disabled();
+                dcad_gui_same_line();
+                dcad_gui_begin_disabled(agent.hasPatch && !agent.busy ? 0 : 1);
+                if (dcad_gui_button("Undo") != 0)
+                {
+                    bool undoAffectsActive;
+                    foreach (file; agent.patchFiles())
+                        if (file == currentFile) undoAffectsActive = true;
+                    if (agent.undoLastChange() && undoAffectsActive)
+                    {
+                        immutable path = buildPath(projectRoot, currentFile);
+                        if (exists(path))
+                        {
+                            auto restored = readText(path);
+                            dcad_textedit_set_text(editor, restored.toStringz);
+                            lsp.changeDocument(currentFile, restored);
+                        }
+                    }
+                }
+                dcad_gui_end_disabled();
+
                 if (sendPressed && !agent.busy)
                 {
-                    import std.string : fromStringz;
                     auto text = fromStringz(agentPrompt.ptr).idup;
                     if (agent.send(text, currentFile))
                     {
                         agentPrompt[] = '\0';
-                        status = "Agent prompt sent";
+                        status = "Big Pickle prompt sent";
                     }
                 }
                 dcad_gui_same_line();
@@ -1005,10 +1223,11 @@ void main(string[] args)
                     {
                         try
                         {
-                            dcad_textedit_set_text(
-                                editor,
-                                readText(buildPath(projectRoot, rel)).toStringz);
+                            auto partText = readText(buildPath(projectRoot, rel));
+                            lsp.closeDocument(currentFile);
+                            dcad_textedit_set_text(editor, partText.toStringz);
                             currentFile = rel;
+                            lsp.openDocument(rel, partText);
                             status = "Opened " ~ rel;
                             updateTitle();
                         }

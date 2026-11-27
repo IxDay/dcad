@@ -1,0 +1,4 @@
+repo: anomalyco/opencode (formerly sst/opencode)
+tag: v2.3.2
+commit: c0ad18b402eb2827fc1ee71c171b1177b3fc02d1
+source: https://github.com/anomalyco/opencode/tree/v2.3.2

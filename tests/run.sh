@@ -7,6 +7,8 @@ cd "$(dirname "$0")/.."
 BUILD_TYPE=${DCAD_BUILD_TYPE:-debug}
 BUILD_FLAG="--build=$BUILD_TYPE"
 
+./tools/check_opencode_pin.sh
+
 dub build "$BUILD_FLAG" --force
 dub run :simple-box "$BUILD_FLAG"
 dub run :box-hole-fillet "$BUILD_FLAG"
@@ -127,4 +129,4 @@ if [ "${DCAD_EMBED_RESOURCES:-0}" = "1" ]; then
     echo "PASS: embedded launcher payload, project template and GUI startup"
 fi
 
-echo "PASS: bindings, examples, 18-part coffee table, GUI, script forms and new project"
+echo "PASS: bindings, examples, 18-part coffee table, GUI, script forms, new project and embedded-agent core"

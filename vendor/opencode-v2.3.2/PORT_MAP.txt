@@ -1,0 +1,9 @@
+# D module -> upstream files translated at v2.3.2
+gui/source/gui/agentcore/messages.d     packages/schema/src/session-message.ts
+gui/source/gui/agentcore/schema.d       packages/schema/src/session.ts packages/schema/src/session-message.ts packages/schema/src/llm.ts packages/schema/src/model.ts packages/schema/src/tool.ts
+gui/source/gui/agentcore/events.d       packages/schema/src/session-event.ts packages/core/src/session/runner/step.ts
+gui/source/gui/agentcore/history.d      packages/schema/src/session.ts packages/schema/src/session-event.ts
+gui/source/gui/agentcore/llm.d          packages/ai/src/protocols/openai-chat.ts packages/schema/src/llm.ts
+gui/source/gui/agentcore/permissions.d  packages/schema/src/permission.ts
+gui/source/gui/agentcore/tools.d        packages/schema/src/tool.ts packages/core/src/tool.ts
+gui/source/gui/agentcore/runner.d       packages/ai/src/loop.ts packages/core/src/session/runner/index.ts packages/core/src/session/runner/step.ts packages/core/src/session/runner/llm.ts

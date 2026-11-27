@@ -93,8 +93,8 @@ subPackage {
     lflags "$PACKAGE_DIR/build/libdcad_gui_shim.a" platform="posix"
     lflags "$PACKAGE_DIR/build/dcad_gui_shim.lib" platform="windows"
     libs "glfw" platform="osx"
-    libs "glfw" "GL" "X11" platform="linux"
-    libs "glfw3_mt" "opengl32" "user32" "gdi32" platform="windows"
+    libs "glfw" "GL" "X11" "curl" platform="linux"
+    libs "glfw3_mt" "opengl32" "user32" "gdi32" "winhttp" platform="windows"
     lflags "-L/opt/homebrew/lib" platform="osx"
     lflags "-framework" "OpenGL" platform="osx"
     lflags "-framework" "Cocoa" platform="osx"
@@ -102,6 +102,9 @@ subPackage {
                          "gui/shim/dcad_native_menu.mm" \
                          "gui/shim/dcad_native_menu_win.cpp" \
                          "gui/shim/dcad_native_menu_x11.cpp" \
+                         "gui/shim/dcad_http_linux.cpp" \
+                         "gui/shim/dcad_http_macos.mm" \
+                         "gui/shim/dcad_http_win.cpp" \
                          "gui/tools/build-gui-shim.sh" "tools/build_shims.py"
 }
 
@@ -146,8 +149,12 @@ subPackage {
     # The GUI shim also contains the GLFW/OpenGL backends, so this test binary
     # needs the same native libraries as :gui even though it never opens a
     # window. macOS gets them through the core library's framework links.
-    libs "glfw" "GL" "X11" "Xrandr" "Xinerama" "Xcursor" "Xi" platform="linux"
-    libs "glfw3_mt" "opengl32" "user32" "gdi32" platform="windows"
+    libs "glfw" "GL" "X11" "Xrandr" "Xinerama" "Xcursor" "Xi" "curl" platform="linux"
+    libs "glfw3_mt" "opengl32" "user32" "gdi32" "winhttp" platform="windows"
+    lflags "-framework" "Foundation" platform="osx"
     extraDependencyFiles "gui/shim/dcad_gui_shim.cpp" \
+                         "gui/shim/dcad_http_linux.cpp" \
+                         "gui/shim/dcad_http_macos.mm" \
+                         "gui/shim/dcad_http_win.cpp" \
                          "gui/tools/build-gui-shim.sh" "tools/build_shims.py"
 }

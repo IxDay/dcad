@@ -40,10 +40,15 @@ enum int tabItemFlagsNoReorder = 1 << 5;
 
 // Chat input: Enter sends, Cmd/Ctrl+Enter inserts a newline, long prompts wrap.
 enum int inputTextFlagsCtrlEnterForNewLine = 1 << 8;
+enum int inputTextFlagsEnterReturnsTrue = 1 << 6;
+enum int inputTextFlagsReadOnly = 1 << 9;
+enum int inputTextFlagsPassword = 1 << 10;
 enum int inputTextFlagsNoHorizontalScroll = 1 << 15;
+enum int inputTextFlagsElideLeft = 1 << 17;
 enum int inputTextFlagsWordWrap = 1 << 24;
 
 // ImGuiKey values (1.93): named keys start at 512.
+enum int keySpace = 524;
 enum int keyEnter = 525;
 enum int keyF5 = 568;
 enum int keyR = 555;
@@ -145,6 +150,10 @@ extern(C) nothrow @nogc
     int  dcad_gui_input_int(const(char)* label, int* v, int step);
     int  dcad_gui_input_text_multiline(const(char)* label, char* buf,
                                        int bufSize, float w, float h, int flags);
+    int  dcad_gui_input_text(const(char)* label, char* buf, int bufSize,
+                             float w, int flags);
+    void dcad_gui_begin_disabled(int disabled);
+    void dcad_gui_end_disabled();
     void dcad_gui_set_next_item_width(float w);
 
     // input
@@ -166,6 +175,10 @@ extern(C) nothrow @nogc
     const(char)* dcad_textedit_get_text(void* ed);
     void        dcad_textedit_render(void* ed, const(char)* title, float w, float h);
     int         dcad_textedit_text_changed(void* ed);
+    void        dcad_textedit_set_read_only(void* ed, int ro);
+    void        dcad_textedit_set_error_markers(void* ed, const(char)* text);
+    void        dcad_textedit_cursor(void* ed, int* line, int* column);
+    void        dcad_textedit_insert_text(void* ed, const(char)* text);
 
     // OCCT meshing
     int  dcad_mesh_shape(const(void)* shape, double deflection, DcadMesh* meshOut);

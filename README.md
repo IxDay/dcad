@@ -142,8 +142,10 @@ whose root is marked by a `.dcad.toml` file (legacy `dcad.json` still works), an
 `dcad-gui --new-project <directory>`
 (or **File > New Project...**) scaffolds the CC BY 4.0
 [daimochi-tsugi](https://ixday.github.io/carpentry/#daimochi-tsugi) joint from
-`project-template/daimochi`. See [`gui/README.md`](gui/README.md) for controls
-and the execution-model tradeoff.
+`project-template/daimochi`. The Agent tab stores its transcript under
+`.dcad/history.jsonl` in the open project; API credentials remain in dcad's
+app cache. See [`gui/README.md`](gui/README.md) for controls and the
+execution-model tradeoff.
 
 ## Samples
 

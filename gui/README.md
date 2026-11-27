@@ -63,15 +63,29 @@ in the top-right of the preview: hovering a part highlights it in the render, an
 clicking it opens the source module that builds that part.
 
 The code pane has two fixed tabs. **Code** is the D editor described above.
-**Agent** is an in-UI OpenCode client: it runs the installed `opencode` CLI in the
-open project directory with its own credentials and full tool access, attaches
-the active `.d` file, and streams text, tool calls and errors into the tab. Enter
-or **Send** submits a prompt; Cmd/Ctrl+Enter inserts a newline. Session IDs and
-transcripts are stored only in dcad's app cache (`~/Library/Caches/dcad/agent` on
-macOS, `~/.cache/dcad/agent` on Linux, `%LOCALAPPDATA%\dcad\agent` on Windows),
-one per project root, so no hidden files are added to the project. dcad runs a
-standalone OpenCode server with `OPENCODE_DB` pointing into that same cache;
-your existing OpenCode config and credentials are unchanged.
+**Agent** is an embedded, in-process Big Pickle client: the session loop,
+canonical V2 events, project tools, permissions, diffs and JSONL history all run
+in D. Streaming HTTPS uses WinHTTP on Windows, NSURLSession on macOS and libcurl
+on Linux, always on a worker thread; the UI never blocks on a model call. The
+agent sees only the open project, and the active `.d` file is attached to each
+prompt. Enter or **Send** submits a prompt, **Stop** cancels a running turn, and
+Cmd/Ctrl+Enter inserts a newline. Model edits are staged with **Diff**, **Keep**
+and **Undo**, which refreshes the open editor after a change is applied or
+restored.
+
+Agent history belongs to the project: every opened project gets a `.dcad/`
+directory containing `history.jsonl` and, after a model edit, reversible patches
+in `.dcad/patches/`. API credentials are dcad-owned and stay in dcad's app cache
+(`~/Library/Caches/dcad/agent` on macOS, `~/.cache/dcad/agent` on Linux,
+`%LOCALAPPDATA%\dcad\agent` on Windows); the installed OpenCode auth store is
+not read. `DCAD_AGENT_API_KEY`, `DCAD_AGENT_BASE_URL` and
+`DCAD_AGENT_CONFIG_DIR` override the persisted values for automation.
+
+The editor uses only the fixed `serve-d` language server. dcad looks for it in
+`DCAD_LSP_EXECUTABLE`, then beside the app resources, then on `PATH`; there is no
+server/plugin/MCP configuration. `serve-d` diagnostics appear as editor markers,
+and Cmd/Ctrl+Space requests completions. If `serve-d` is absent the editor keeps
+working with compiler diagnostics and reports that state in the status line.
 
 ## Controls
 
@@ -80,6 +94,9 @@ your existing OpenCode config and credentials are unchanged.
 | Code / Agent tabs | Click the fixed tabs at the top of the editor pane |
 | Run script | Cmd/Ctrl+Enter, or the Run icon (Code tab) |
 | Send agent prompt | Enter in the Agent prompt, or Send; Cmd/Ctrl+Enter adds a newline |
+| Stop agent turn | Stop (Agent tab) |
+| Review or revert agent edit | Diff, Keep and Undo (Agent tab) |
+| D completion | Cmd/Ctrl+Space in the Code tab (requires `serve-d`) |
 | Orbit | Left-drag in the viewport |
 | Pan | Middle/Right-drag in the viewport |
 | Zoom | Scroll over the viewport |

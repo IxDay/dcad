@@ -73,6 +73,14 @@ def menu_source():
     return GUI / "shim" / "dcad_native_menu_x11.cpp"
 
 
+def http_source():
+    if WINDOWS:
+        return GUI / "shim" / "dcad_http_win.cpp"
+    if MACOS:
+        return GUI / "shim" / "dcad_http_macos.mm"
+    return GUI / "shim" / "dcad_http_linux.cpp"
+
+
 def build(which):
     if which == "launcher":
         # Produce the ZIP (with the already-linked GUI binary) and its linker
@@ -97,6 +105,7 @@ def build(which):
             vendor / "TextEditor.cpp",
             GUI / "shim" / "dcad_gui_shim.cpp",
             menu_source(),
+            http_source(),
         ]
         includes = [str(vendor), str(vendor / "backends")] + occt_includes()
         if WINDOWS:

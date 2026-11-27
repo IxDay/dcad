@@ -89,7 +89,7 @@ jobs:
             libocct-modeling-algorithms-dev libocct-data-exchange-dev \
             libocct-ocaf-dev libglfw3-dev libgl1-mesa-dev \
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev \
-            g++
+            libcurl4-openssl-dev g++
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'

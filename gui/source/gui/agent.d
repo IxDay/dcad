@@ -1,16 +1,54 @@
 /**
- * In-UI OpenCode agent bridge.
+ * Agent tab bridge.
  *
- * The Agent tab runs the installed `opencode` CLI with the open project as the
- * working directory, so the agent gets the same files, configuration,
- * credentials and tools as a terminal session. JSON events are streamed back
- * through a reader thread and drained on the GUI thread.
+ * This module is now a compatibility façade: the legacy installed-CLI path is
+ * still here for the transition, while the embedded Big Pickle port lives in
+ * gui.agentcore.* modules. The replacement keeps all model/tool work off the GUI
+ * thread and drains events once per frame.
  *
- * Session IDs and UI transcripts are kept only in dcad's app cache. Nothing is
- * written into the open project.
+ * Project history is stored in <project>/.dcad/history.jsonl. Credentials stay
+ * in dcad's app cache and are never written into a project.
  */
 module gui.agent;
 
+public import gui.agentcore.messages : AgentMessage, AgentRole;
+public import gui.agentcore.events : AgentEvent, AgentEventType,
+                                decodeAgentEvent, projectAgentEvent;
+public import gui.agentcore.history : AgentHistoryEntry, appendAgentHistory,
+                                readAgentHistory, writeAgentHistorySnapshot;
+public import gui.agentcore.llm : AgentChatMessage, AgentCompletionChunk,
+                                bigPickleModel, chatCompletionsURL,
+                                isAgentStreamDone, makeChatRequest,
+                                parseChatCompletionChunk;
+public import gui.agentcore.credentials : AgentCredential, AgentCredentials,
+                                defaultAgentBaseURL;
+public import gui.agentcore.sse : AgentSSEEvent, AgentSSEParser;
+public import gui.agentcore.paths : agentConfigDir, agentHistoryDir;
+public import gui.agentcore.transport : AgentHTTPRequest, AgentHTTPResult,
+                                AgentMemoryTransport, AgentTransport,
+                                AgentUnavailableTransport;
+public import gui.agentcore.permissions : AgentPermissionDecision,
+                                AgentPermissionEffect, AgentPermissionReply,
+                                AgentPermissionRequest, AgentPermissionRule,
+                                AgentPermissions;
+public import gui.agentcore.tools : AgentSubagentRunner, AgentTool,
+                                AgentToolRegistry;
+public import gui.agentcore.runner : AgentPermissionApprover,
+                                AgentSessionRunner;
+public import gui.agentcore.patches : AgentFileDiff, AgentPatchSet,
+                                AgentPatchStore, revertEventData;
+public import gui.agentcore.schema : AgentFinishReason, AgentModelRef,
+                                AgentPromptInput, AgentSessionInfo,
+                                AgentToolCall, AgentToolState,
+                                normalizeFinishReason, parseAgentSessionInfo,
+                                parseAgentPromptInput;
+
+import gui.agentcore.paths : agentAppCacheDir, agentHistoryPath;
+import gui.agentcore.credentials : AgentCredentials;
+import gui.agentcore.permissions : AgentPermissions;
+import gui.agentcore.runner : AgentSessionRunner;
+import gui.agentcore.tools : AgentToolRegistry;
+import gui.agentcore.transport : AgentTransport;
 import std.algorithm : startsWith;
 import core.sync.mutex : Mutex;
 import core.thread.osthread : Thread;
@@ -23,22 +61,6 @@ import std.path : buildPath;
 import std.process : Config, Pid, Redirect, environment, pipeProcess, wait, kill;
 import std.stdio : File;
 import std.string : strip;
-
-enum AgentRole
-{
-    user,
-    assistant,
-    tool,
-    error,
-    status
-}
-
-struct AgentMessage
-{
-    AgentRole role;
-    string text;
-    string key;
-}
 
 /// Messages sent from the CLI reader thread to the GUI thread.
 private struct AgentPipeLine
@@ -54,12 +76,48 @@ private struct AgentProcessDone
     string error;
 }
 
-/// Thread-safe mailbox between the CLI reader thread and the GUI thread.
+/// Events emitted by the embedded runner, tagged so stale work is discarded.
+private struct AgentCoreEvent
+{
+    ulong generation;
+    AgentEvent event;
+}
+
+private struct AgentCoreDone
+{
+    ulong generation;
+    string error;
+}
+
+final class AgentCancelToken
+{
+    private Mutex mutex;
+    private bool cancelled;
+
+    this()
+    {
+        mutex = new Mutex();
+    }
+
+    void cancel()
+    {
+        synchronized (mutex) cancelled = true;
+    }
+
+    bool isCancelled()
+    {
+        synchronized (mutex) return cancelled;
+    }
+}
+
+/// Thread-safe mailbox between workers and the GUI thread.
 private final class AgentChannel
 {
     private Mutex mutex;
     private AgentPipeLine[] lines;
     private AgentProcessDone[] results;
+    private AgentCoreEvent[] coreEvents;
+    private AgentCoreDone[] coreResults;
 
     this()
     {
@@ -78,6 +136,18 @@ private final class AgentChannel
             results ~= AgentProcessDone(generation, code, error);
     }
 
+    void pushEvent(ulong generation, AgentEvent event)
+    {
+        synchronized (mutex)
+            coreEvents ~= AgentCoreEvent(generation, event);
+    }
+
+    void pushCoreDone(ulong generation, string error)
+    {
+        synchronized (mutex)
+            coreResults ~= AgentCoreDone(generation, error);
+    }
+
     void take(ref AgentPipeLine[] outLines, ref AgentProcessDone[] outResults)
     {
         synchronized (mutex)
@@ -86,6 +156,18 @@ private final class AgentChannel
             outResults = results;
             lines = null;
             results = null;
+        }
+    }
+
+    void takeCore(ref AgentCoreEvent[] outEvents,
+                  ref AgentCoreDone[] outResults)
+    {
+        synchronized (mutex)
+        {
+            outEvents = coreEvents;
+            outResults = coreResults;
+            coreEvents = null;
+            coreResults = null;
         }
     }
 }
@@ -120,6 +202,111 @@ private final class AgentWorkerState
     }
 }
 
+/// Runs the embedded session core entirely off the GUI thread.
+private final class AgentCoreWorkerState
+{
+    AgentSessionRunner runner;
+    AgentTransport transport;
+    AgentCredential credential;
+    AgentPermissions permissions;
+    string projectRoot;
+    string prompt;
+    string activeFile;
+    ulong generation;
+    AgentChannel channel;
+    AgentCancelToken token;
+
+    this(AgentSessionRunner runner, AgentTransport transport,
+         AgentCredential credential, AgentPermissions permissions,
+         string projectRoot, string prompt, string activeFile,
+         ulong generation, AgentChannel channel, AgentCancelToken token)
+    {
+        this.runner = runner;
+        this.transport = transport;
+        this.credential = credential;
+        this.permissions = permissions;
+        this.projectRoot = projectRoot;
+        this.prompt = prompt;
+        this.activeFile = activeFile;
+        this.generation = generation;
+        this.channel = channel;
+        this.token = token;
+    }
+
+    /// Child session used by the `subagent` tool. It cannot spawn further
+    /// subagents and only forwards useful transcript events to the UI.
+    string runSubagent(string task, string activeFile,
+                       scope void delegate(AgentEvent) emit,
+                       scope bool delegate() cancelled)
+    {
+        auto childID = makeSessionId(projectRoot,
+            cast(ulong) Clock.currTime().toUnixTime() ^ fnv1a(task));
+        auto childTools = new AgentToolRegistry();
+        auto childRunner = new AgentSessionRunner(
+            transport, childTools, permissions, credential,
+            projectRoot, childID, 4, "subagent-" ~ childID);
+
+        string answer;
+        void collect(AgentEvent event)
+        {
+            final switch (event.type)
+            {
+                case AgentEventType.textDelta:
+                    answer ~= event.delta;
+                    channel.pushEvent(generation, event);
+                    break;
+                case AgentEventType.toolCalled:
+                case AgentEventType.toolSuccess:
+                case AgentEventType.toolFailed:
+                    channel.pushEvent(generation, event);
+                    break;
+                case AgentEventType.serverConnected:
+                case AgentEventType.executionStarted:
+                case AgentEventType.executionSucceeded:
+                case AgentEventType.executionFailed:
+                case AgentEventType.executionInterrupted:
+                case AgentEventType.stepStarted:
+                case AgentEventType.stepFirstToken:
+                case AgentEventType.stepStreamed:
+                case AgentEventType.stepEnded:
+                case AgentEventType.stepFailed:
+                case AgentEventType.reasoningDelta:
+                case AgentEventType.toolInputStarted:
+                case AgentEventType.toolInputDelta:
+                case AgentEventType.toolInputEnded:
+                case AgentEventType.toolProgress:
+                case AgentEventType.permissionAsked:
+                case AgentEventType.permissionReplied:
+                case AgentEventType.sessionIdle:
+                case AgentEventType.revertStaged:
+                case AgentEventType.revertCleared:
+                case AgentEventType.revertCommitted:
+                case AgentEventType.unknown:
+                    break;
+            }
+        }
+        childRunner.run(task, activeFile, &collect, cancelled,
+                        delegate(AgentPermissionRequest) { return true; });
+        return answer.length ? answer : "subagent completed without text";
+    }
+
+    void run()
+    {
+        try
+        {
+            runner.run(prompt, activeFile,
+                delegate(AgentEvent event) {
+                    channel.pushEvent(generation, event);
+                },
+                delegate() { return token.isCancelled(); },
+                delegate(AgentPermissionRequest) { return true; });
+            channel.pushCoreDone(generation, null);
+        }
+        catch (Exception e)
+            channel.pushCoreDone(generation, e.msg);
+    }
+}
+
 private ulong fnv1a(string text)
 {
     ulong hash = 14_695_981_039_346_656_037UL;
@@ -140,40 +327,16 @@ private string hex(ulong value)
     return outBuf.idup;
 }
 
-/// Directory used for agent session metadata and transcripts. Never the project.
+/// App-cache location for credentials and transient agent state.
 string agentCacheDir()
 {
-    version (Windows)
-    {
-        import std.process : environment;
+    return agentAppCacheDir();
+}
 
-        auto local = environment.get("LOCALAPPDATA", "");
-        if (local.length) return buildPath(local, "dcad", "agent");
-        auto profile = environment.get("USERPROFILE", "");
-        if (profile.length)
-            return buildPath(profile, "AppData", "Local", "dcad", "agent");
-    }
-    else version (OSX)
-    {
-        import std.process : environment;
-
-        auto home = environment.get("HOME", "");
-        if (home.length) return buildPath(home, "Library", "Caches", "dcad", "agent");
-    }
-    else
-    {
-        import std.process : environment;
-
-        auto xdg = environment.get("XDG_CACHE_HOME", "");
-        if (xdg.length) return buildPath(xdg, "dcad", "agent");
-        auto home = environment.get("HOME", "");
-        if (home.length) return buildPath(home, ".cache", "dcad", "agent");
-    }
-
-    // Still outside the project if the platform exposes no home directory.
-    import std.file : tempDir;
-
-    return buildPath(tempDir(), "dcad-agent-cache");
+/// Project-owned transcript location used by the embedded agent core.
+string agentHistoryFilePath(string projectRoot)
+{
+    return agentHistoryPath(projectRoot);
 }
 
 private string agentCachePath(string projectRoot)
@@ -338,9 +501,131 @@ final class AgentBridge
     private size_t changesSinceSave;
     private AgentChannel channel;
 
+    /// Set by dcad when the embedded core is selected. Null keeps the legacy
+    /// installed-CLI bridge available during the transition.
+    AgentTransport transport;
+
+    private AgentCancelToken cancelToken;
+    private string stagedPatchID;
+    private bool editorRefreshRequested;
+
     this()
     {
         channel = new AgentChannel();
+    }
+
+    /// Select the in-process agent core. The transport is supplied by dcad so
+    /// tests can inject a deterministic implementation.
+    void useEmbedded(AgentTransport selected)
+    {
+        close();
+        transport = selected;
+    }
+
+    /// Current dcad-owned credential. Environment overrides win over the
+    /// persisted value, matching the agent core's loader.
+    AgentCredential credential()
+    {
+        return (new AgentCredentials()).load();
+    }
+
+    /// Persist credentials in dcad's app cache, never in the open project.
+    void saveCredential(string apiKey, string baseURL)
+    {
+        (new AgentCredentials()).save(AgentCredential(strip(apiKey), strip(baseURL)));
+    }
+
+    /// True when a model edit has an undoable project patch.
+    bool hasPatch() const @property
+    {
+        return stagedPatchID.length != 0;
+    }
+
+    /// Unified diff for the staged change; empty when nothing is staged.
+    string patchDiff()
+    {
+        if (!hasPatch || !projectRoot.length) return "";
+        return (new AgentPatchStore(projectRoot)).patchText(stagedPatchID);
+    }
+
+    /// Project-relative files touched by the staged change.
+    string[] patchFiles()
+    {
+        if (!hasPatch || !projectRoot.length) return null;
+        auto set = (new AgentPatchStore(projectRoot)).load(stagedPatchID);
+        string[] result;
+        foreach (file; set.files) result ~= file.file;
+        return result;
+    }
+
+    /// True once after a staged change touches the file open in the editor.
+    bool consumeEditorRefresh()
+    {
+        immutable requested = editorRefreshRequested;
+        editorRefreshRequested = false;
+        return requested;
+    }
+
+    /// Restore project files to their state before the staged change.
+    bool undoLastChange()
+    {
+        if (!hasPatch || !projectRoot.length || busy) return false;
+        auto store = new AgentPatchStore(projectRoot);
+        if (!store.undo(stagedPatchID)) return false;
+        appendMessage(messages, AgentMessage(AgentRole.status, "Change undone",
+                                             "undo:" ~ stagedPatchID));
+        editorRefreshRequested = true;
+        stagedPatchID = null;
+        status = "Change undone";
+        revision++;
+        flush();
+        return true;
+    }
+
+    /// Keep the staged edits and drop the undo snapshot.
+    bool keepLastChange()
+    {
+        if (!hasPatch || !projectRoot.length || busy) return false;
+        auto store = new AgentPatchStore(projectRoot);
+        if (!store.clear(stagedPatchID)) return false;
+        appendMessage(messages, AgentMessage(AgentRole.status, "Change kept",
+                                             "keep:" ~ stagedPatchID));
+        stagedPatchID = null;
+        status = "Change kept";
+        revision++;
+        flush();
+        return true;
+    }
+
+    /// Explicit Stop for the UI. Stale worker events are discarded by the
+    /// generation guard in drain().
+    void stop()
+    {
+        if (!busy) return;
+        close();
+        appendMessage(messages, AgentMessage(AgentRole.status, "Agent interrupted",
+                                             "interrupt:ui"));
+        status = "Agent stopped";
+        revision++;
+        flush();
+    }
+
+    private void refreshPatch()
+    {
+        stagedPatchID = null;
+        if (!projectRoot.length) return;
+        auto latest = (new AgentPatchStore(projectRoot)).latest();
+        stagedPatchID = latest.id;
+    }
+
+    private static string patchIDFromEvent(AgentEvent event)
+    {
+        if (event.revert.type != JSONType.object) return "";
+        if (auto value = "snapshot" in event.revert.object)
+            if (value.type == JSONType.string) return value.str;
+        if (auto value = "messageID" in event.revert.object)
+            if (value.type == JSONType.string) return value.str;
+        return "";
     }
 
     /// Write queued transcript changes to the app cache immediately.
@@ -357,15 +642,21 @@ final class AgentBridge
         projectRoot = root;
         projectName = name;
         load();
+        refreshPatch();
         status = messages.length ? "Ready - continue the session"
                                  : "Ready - ask the agent";
         revision++;
     }
 
-    /// Stop a running CLI process. Safe when nothing is running.
+    /// Stop a running worker or CLI process. Safe when nothing is running.
     void close()
     {
         generation++;
+        if (cancelToken !is null)
+        {
+            cancelToken.cancel();
+            cancelToken = null;
+        }
         if (hasPid)
         {
             try
@@ -392,6 +683,9 @@ final class AgentBridge
         if (!sessionId.length)
             sessionId = makeSessionId(projectRoot,
                                       cast(ulong) Clock.currTime().toUnixTime());
+
+        if (transport !is null)
+            return sendEmbedded(activeFile);
 
         string[] args = [
             "opencode", "--standalone", "run",
@@ -448,12 +742,65 @@ final class AgentBridge
         return true;
     }
 
+    private bool sendEmbedded(string activeFile)
+    {
+        auto credential = (new AgentCredentials()).load();
+        if (!credential.hasKey)
+        {
+            appendMessage(messages, AgentMessage(AgentRole.error,
+                "dcad agent API key is not configured. Add it in the Agent tab."));
+            status = "Agent unavailable";
+            revision++;
+            flush();
+            return false;
+        }
+
+        auto permissions = new AgentPermissions();
+        cancelToken = new AgentCancelToken();
+        busy = true;
+        status = "Agent working...";
+        immutable myGeneration = ++generation;
+
+        auto state = new AgentCoreWorkerState(
+            null, transport, credential, permissions, projectRoot,
+            promptTextForRun(activeFile), activeFile,
+            myGeneration, channel, cancelToken);
+        auto tools = new AgentToolRegistry(
+            delegate(string task, string childFile,
+                     scope void delegate(AgentEvent) emit,
+                     scope bool delegate() cancelled) {
+                return state.runSubagent(task, childFile, emit, cancelled);
+            });
+        auto runner = new AgentSessionRunner(
+            transport, tools, permissions, credential,
+            projectRoot, sessionId);
+        state.runner = runner;
+
+        auto worker = new Thread(&state.run);
+        worker.isDaemon = true;
+        worker.start();
+        return true;
+    }
+
+    /// Rebuild the user prompt for the runner. send() already appended the same
+    /// text to the transcript, so this is only the worker's input payload.
+    private string promptTextForRun(string activeFile)
+    {
+        if (!messages.length ||
+            messages[$ - 1].role != AgentRole.user)
+            return "";
+        return messages[$ - 1].text;
+    }
+
     /// Drain all messages queued by the reader thread. Call once per frame.
     void drain()
     {
         AgentPipeLine[] lines;
         AgentProcessDone[] results;
+        AgentCoreEvent[] coreEvents;
+        AgentCoreDone[] coreResults;
         channel.take(lines, results);
+        channel.takeCore(coreEvents, coreResults);
 
         foreach (msg; lines)
         {
@@ -467,6 +814,74 @@ final class AgentBridge
             else
                 revision++;
             markDirty();
+        }
+
+        foreach (msg; coreEvents)
+        {
+            if (msg.generation != generation) continue;
+            immutable before = messages.length;
+            immutable previousStatus = status;
+            if (projectAgentEvent(msg.event, messages, status))
+            {
+                if (messages.length != before || status != previousStatus)
+                    revision++;
+            }
+            final switch (msg.event.type)
+            {
+                case AgentEventType.revertStaged:
+                {
+                    immutable previous = stagedPatchID;
+                    stagedPatchID = patchIDFromEvent(msg.event);
+                    if (stagedPatchID.length && stagedPatchID != previous)
+                        editorRefreshRequested = true;
+                    break;
+                }
+                case AgentEventType.revertCleared:
+                case AgentEventType.revertCommitted:
+                    stagedPatchID = null;
+                    break;
+                case AgentEventType.serverConnected:
+                case AgentEventType.executionStarted:
+                case AgentEventType.executionSucceeded:
+                case AgentEventType.executionFailed:
+                case AgentEventType.executionInterrupted:
+                case AgentEventType.stepStarted:
+                case AgentEventType.stepFirstToken:
+                case AgentEventType.stepStreamed:
+                case AgentEventType.stepEnded:
+                case AgentEventType.stepFailed:
+                case AgentEventType.textDelta:
+                case AgentEventType.reasoningDelta:
+                case AgentEventType.toolInputStarted:
+                case AgentEventType.toolInputDelta:
+                case AgentEventType.toolInputEnded:
+                case AgentEventType.toolCalled:
+                case AgentEventType.toolProgress:
+                case AgentEventType.toolSuccess:
+                case AgentEventType.toolFailed:
+                case AgentEventType.permissionAsked:
+                case AgentEventType.permissionReplied:
+                case AgentEventType.sessionIdle:
+                case AgentEventType.unknown:
+                    break;
+            }
+            markDirty();
+        }
+
+        foreach (msg; coreResults)
+        {
+            if (msg.generation != generation) continue;
+            busy = false;
+            cancelToken = null;
+            if (msg.error.length)
+            {
+                status = "Agent failed: " ~ msg.error;
+                appendMessage(messages, AgentMessage(AgentRole.error, status));
+                revision++;
+            }
+            else
+                status = "Agent ready";
+            flush();
         }
 
         foreach (msg; results)
@@ -520,6 +935,16 @@ final class AgentBridge
         }
         root["messages"] = entries;
         write(agentCachePath(projectRoot), root.toString());
+
+        // The project-owned history file is the source of truth going forward.
+        // Mirror the legacy bridge's transcript until the embedded runner
+        // replaces this save path.
+        try
+            writeAgentHistorySnapshot(projectRoot, sessionId, messages);
+        catch (Exception)
+        {
+            // A history write failure must not lose the app-cache transcript.
+        }
     }
 
     private void load()

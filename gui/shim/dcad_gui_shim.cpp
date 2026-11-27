@@ -11,6 +11,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -724,6 +725,18 @@ extern "C" int dcad_gui_input_text_multiline(const char* label, char* buf,
                                      ImVec2(w, h),
                                      static_cast<ImGuiInputTextFlags>(flags)) ? 1 : 0;
 }
+extern "C" int dcad_gui_input_text(const char* label, char* buf, int bufSize,
+                                   float w, int flags)
+{
+    ImGui::SetNextItemWidth(w);
+    return ImGui::InputText(label, buf, static_cast<size_t>(bufSize),
+                            static_cast<ImGuiInputTextFlags>(flags)) ? 1 : 0;
+}
+extern "C" void dcad_gui_begin_disabled(int disabled)
+{
+    ImGui::BeginDisabled(disabled != 0);
+}
+extern "C" void dcad_gui_end_disabled() { ImGui::EndDisabled(); }
 extern "C" void dcad_gui_set_next_item_width(float w) { ImGui::SetNextItemWidth(w); }
 
 /* --------------------------------------------------------------------------
@@ -888,6 +901,32 @@ extern "C" int dcad_textedit_text_changed(void* ed)
 extern "C" void dcad_textedit_set_read_only(void* ed, int ro)
 {
     static_cast<TextEditor*>(ed)->SetReadOnly(ro != 0);
+}
+extern "C" void dcad_textedit_set_error_markers(void* ed, const char* text)
+{
+    TextEditor::ErrorMarkers markers;
+    if (text != nullptr) {
+        std::istringstream stream(text);
+        std::string line;
+        while (std::getline(stream, line)) {
+            if (line.empty()) continue;
+            const size_t tab = line.find('\t');
+            if (tab == std::string::npos) continue;
+            const int number = std::atoi(line.substr(0, tab).c_str());
+            if (number > 0) markers[number] = line.substr(tab + 1);
+        }
+    }
+    static_cast<TextEditor*>(ed)->SetErrorMarkers(markers);
+}
+extern "C" void dcad_textedit_cursor(void* ed, int* line, int* column)
+{
+    const auto position = static_cast<TextEditor*>(ed)->GetCursorPosition();
+    if (line != nullptr) *line = position.mLine;
+    if (column != nullptr) *column = position.mColumn;
+}
+extern "C" void dcad_textedit_insert_text(void* ed, const char* text)
+{
+    if (text != nullptr) static_cast<TextEditor*>(ed)->InsertText(text);
 }
 
 /* --------------------------------------------------------------------------

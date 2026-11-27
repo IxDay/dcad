@@ -203,7 +203,7 @@ def linux_libraries(stage):
         "TKernel", "TKMath", "TKG2d", "TKG3d", "TKGeomBase", "TKGeomAlgo",
         "TKBRep", "TKTopAlgo", "TKPrim", "TKBO", "TKBool", "TKFillet",
         "TKOffset", "TKXSBase", "TKMesh", "TKSTEP", "TKSTEPBase",
-        "TKSTEPAttr", "TKSTEP209", "TKXDESTEP", "TKXDEIGES", "glfw",
+        "TKSTEPAttr", "TKSTEP209", "TKXDESTEP", "TKXDEIGES", "glfw", "curl",
     ]
     ldconfig = linux_ldconfig_index()
     roots = linux_library_roots()
