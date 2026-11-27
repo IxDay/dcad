@@ -19,6 +19,8 @@ import std.process : environment;
 
 import gui.agent : AgentBridge, AgentRole, bigPickleModel,
                    defaultAgentBaseURL;
+import gui.agent_commands : parseAgentCommand, agentCommandArgs,
+                            agentCommandHelp;
 import gui.agentcore.native_transport : AgentNativeTransport;
 import gui.platform : processId, nativeHandles, resourceRoot;
 import gui.project : Project, chooseProjectParent, fallbackProjectParent,
@@ -445,20 +447,99 @@ void main(string[] args)
     char[agentPromptCapacity] agentPrompt;
     agentPrompt[] = '\0';
 
-    enum size_t agentKeyCapacity = 512;
-    enum size_t agentURLCapacity = 512;
-    char[agentKeyCapacity] agentKeyBuffer;
-    char[agentURLCapacity] agentURLBuffer;
-    auto startupCredential = agent.credential();
-    fillTextBuffer(agentKeyBuffer, startupCredential.apiKey);
-    fillTextBuffer(agentURLBuffer, startupCredential.baseURL);
-    int showAgentKey;
     bool showAgentDiff;
-    bool agentConfigChanged;
+    bool agentPromptFocus;
 
     int currentTab;
     ulong agentRevision = agent.revision;
     bool suppressRun;
+
+    void undoAgentChange()
+    {
+        if (!agent.hasPatch || agent.busy) return;
+        bool undoAffectsActive;
+        foreach (file; agent.patchFiles())
+            if (file == currentFile) undoAffectsActive = true;
+        if (agent.undoLastChange() && undoAffectsActive)
+        {
+            immutable path = buildPath(projectRoot, currentFile);
+            if (exists(path))
+            {
+                auto restored = readText(path);
+                dcad_textedit_set_text(editor, restored.toStringz);
+                lsp.changeDocument(currentFile, restored);
+            }
+        }
+    }
+
+    void runAgentCommand(string input)
+    {
+        immutable command = parseAgentCommand(input);
+        switch (command.name)
+        {
+            case "commands":
+            case "help":
+                agent.note(agentCommandHelp());
+                break;
+            case "stop":
+                if (agent.busy) agent.stop();
+                else agent.note("Nothing running");
+                break;
+            case "diff":
+                if (!agent.hasPatch) agent.note("No staged change");
+                else
+                {
+                    showAgentDiff = !showAgentDiff;
+                    agent.note(showAgentDiff ? "Diff shown" : "Diff hidden");
+                }
+                break;
+            case "keep":
+                if (!agent.hasPatch || agent.busy)
+                    agent.note("No staged change to keep");
+                else
+                    agent.keepLastChange();
+                break;
+            case "undo":
+                if (!agent.hasPatch || agent.busy)
+                    agent.note("No staged change to undo");
+                else
+                    undoAgentChange();
+                break;
+            case "model":
+            {
+                auto cred = agent.credential();
+                agent.note("Model: " ~ bigPickleModel ~ "\nEndpoint: " ~
+                           (cred.baseURL.length ? cred.baseURL : defaultAgentBaseURL));
+                break;
+            }
+            case "auth":
+            {
+                auto parts = agentCommandArgs(command.args);
+                if (parts.length < 1)
+                {
+                    agent.note("Usage: /auth <key> [base-url]");
+                    break;
+                }
+                immutable url = parts.length > 1 ? parts[1] : defaultAgentBaseURL;
+                agent.saveCredential(parts[0], url);
+                status = "Agent credentials saved";
+                agent.note("Credentials saved in dcad's app cache");
+                break;
+            }
+            case "status":
+            {
+                auto session = agent.sessionId.length ? agent.sessionId : "(new)";
+                agent.note("Session: " ~ session ~ "\nRunning: " ~
+                           (agent.busy ? "yes" : "no") ~ "\nStaged change: " ~
+                           (agent.hasPatch ? "yes" : "no"));
+                break;
+            }
+            default:
+                agent.note("Unknown command: /" ~ command.name ~
+                           "\nType /commands for the command list");
+                break;
+        }
+    }
 
     // Project tree state.
     bool[string] folderOpen = [
@@ -667,6 +748,11 @@ void main(string[] args)
         // Moving the window to a monitor with a different DPI changes the
         // framebuffer ratio; rebuild fonts and layout when that happens.
         refreshUiScale(window);
+        // OpenCode-style global interrupt: Esc stops the running turn even if
+        // the user has switched to the Code tab while the agent works.
+        immutable interruptedThisFrame = agent.busy &&
+            dcad_gui_key_chord_pressed(keyEscape) != 0;
+        if (interruptedThisFrame) agent.stop();
         // CLI output is collected on a reader thread; move it to GUI-owned
         // state before any widget reads the transcript.
         agent.drain();
@@ -744,6 +830,7 @@ void main(string[] args)
         {
             // Two fixed views share this pane. Neither tab can be dragged,
             // reordered or closed, so the pane split itself stays fixed.
+            immutable previousTab = currentTab;
             int activeTab = currentTab;
             if (dcad_gui_begin_tab_bar("##code-tabs", tabBarFlagsNone))
             {
@@ -760,7 +847,9 @@ void main(string[] args)
                 dcad_gui_end_tab_bar();
             }
             currentTab = activeTab;
-            dcad_gui_separator();
+            // The Agent view is deliberately borderless and chrome-free; the
+            // Code view keeps its separator before the script action row.
+            if (activeTab == 0) dcad_gui_separator();
 
             float wx, wy, ww, wh;
             dcad_gui_get_window_pos(&wx, &wy);
@@ -861,62 +950,21 @@ void main(string[] args)
             else
             {
                 // Cmd/Ctrl+Enter belongs to the chat input here; script Run
-                // stays on the Code tab.
+                // stays on the Code tab. The Agent pane has no buttons or
+                // borders: Enter sends, Esc interrupts, and /commands exposes
+                // every other action.
                 suppressRun = true;
-                auto sessionLabel = agent.sessionId.length
-                    ? "dcad agent session " ~ agent.sessionId
-                    : "dcad agent session (new)";
-                dcad_gui_text_colored(sessionLabel.toStringz,
-                                      0.35f, 0.35f, 0.35f, 1);
-                dcad_gui_separator();
 
-                // Credentials stay in dcad's app cache and are never copied
-                // into the project's history or patch files.
-                dcad_gui_align_text_to_frame_padding();
-                dcad_gui_text_colored("API key", 0.45f, 0.45f, 0.45f, 1);
-                dcad_gui_same_line();
-                immutable configFieldW = ww - px(300);
-                if (dcad_gui_input_text("##agent-api-key", agentKeyBuffer.ptr,
-                        cast(int) agentKeyBuffer.length, configFieldW,
-                        (showAgentKey ? 0 : inputTextFlagsPassword) |
-                        inputTextFlagsEnterReturnsTrue) != 0)
-                    agentConfigChanged = true;
-                dcad_gui_same_line();
-                if (dcad_gui_checkbox("##show-agent-key", &showAgentKey) != 0)
-                    dcad_gui_set_item_tooltip("Show API key");
-                dcad_gui_same_line();
-                dcad_gui_align_text_to_frame_padding();
-                if (dcad_gui_button("Save") != 0)
-                {
-                    auto key = fromStringz(agentKeyBuffer.ptr).idup;
-                    auto url = fromStringz(agentURLBuffer.ptr).idup;
-                    agent.saveCredential(key, url.length ? url : defaultAgentBaseURL);
-                    agentConfigChanged = false;
-                    status = "Agent credentials saved";
-                }
-
-                dcad_gui_align_text_to_frame_padding();
-                dcad_gui_text_colored("Base URL", 0.45f, 0.45f, 0.45f, 1);
-                dcad_gui_same_line();
-                if (dcad_gui_input_text("##agent-base-url", agentURLBuffer.ptr,
-                        cast(int) agentURLBuffer.length, configFieldW,
-                        inputTextFlagsEnterReturnsTrue) != 0)
-                    agentConfigChanged = true;
-                dcad_gui_same_line();
-                dcad_gui_align_text_to_frame_padding();
-                dcad_gui_text_colored("Model", 0.45f, 0.45f, 0.45f, 1);
-                dcad_gui_same_line();
-                dcad_gui_text_colored(bigPickleModel, 0.63f, 0.71f, 0.42f, 1);
-                if (agentConfigChanged)
-                    dcad_gui_set_item_tooltip("Press Save to store credentials");
+                if ((activeTab == 1 && previousTab != 1) || interruptedThisFrame)
+                    agentPromptFocus = true;
 
                 float cursorX, cursorY;
                 dcad_gui_get_cursor_screen_pos(&cursorX, &cursorY);
-                immutable logReserve = px(190);
+                immutable logReserve = px(104);
                 immutable logRoom = (wy + wh - px(8)) - cursorY - logReserve;
                 if (dcad_gui_begin_child("##agent-log", 0,
                                          logRoom > px(80) ? logRoom : px(80),
-                                         childFlagsBorders))
+                                         childFlagsNone))
                 {
                     foreach (msg; agent.messages)
                     {
@@ -925,15 +973,15 @@ void main(string[] args)
                         final switch (msg.role)
                         {
                             case AgentRole.user:
-                                prefix = "You: ";
+                                prefix = "> ";
                                 r = 0.49f; g = 0.69f; b = 0.76f;
                                 break;
                             case AgentRole.assistant:
-                                prefix = "Agent: ";
+                                prefix = "";
                                 r = 0.22f; g = 0.22f; b = 0.22f;
                                 break;
                             case AgentRole.tool:
-                                prefix = "Tool: ";
+                                prefix = "";
                                 r = 0.40f; g = 0.40f; b = 0.40f;
                                 break;
                             case AgentRole.error:
@@ -959,79 +1007,53 @@ void main(string[] args)
                 if (showAgentDiff && agent.hasPatch)
                 {
                     dcad_gui_spacing();
-                    dcad_gui_text_colored("Staged diff", 0.45f, 0.45f, 0.45f, 1);
-                    if (dcad_gui_begin_child("##agent-diff", 0, px(110),
-                                             childFlagsBorders))
+                    if (dcad_gui_begin_child("##agent-diff", 0, px(96),
+                                             childFlagsNone))
                         dcad_gui_text_wrapped(agent.patchDiff().toStringz);
                     dcad_gui_end_child();
                 }
 
                 dcad_gui_spacing();
-                dcad_gui_input_text_multiline("##agent-prompt", agentPrompt.ptr,
+                if (agentPromptFocus)
+                {
+                    dcad_gui_set_keyboard_focus_here();
+                    agentPromptFocus = false;
+                }
+                bool submit = dcad_gui_input_text_multiline_plain(
+                    "##agent-prompt", agentPrompt.ptr,
                     cast(int) agentPrompt.length, ww - px(24), px(64),
+                    inputTextFlagsEnterReturnsTrue |
                     inputTextFlagsCtrlEnterForNewLine |
                     inputTextFlagsNoHorizontalScroll |
-                    inputTextFlagsWordWrap);
-                bool sendPressed = false;
-                if (dcad_gui_is_item_active() != 0)
-                {
-                    // Enter sends; Cmd/Ctrl+Enter inserts a newline. The global
-                    // Cmd/Ctrl+Enter script shortcut is suppressed below.
-                    if (dcad_gui_key_chord_pressed(keyEnter) != 0)
-                        sendPressed = true;
-                }
-                dcad_gui_begin_disabled(agent.busy ? 1 : 0);
-                if (dcad_gui_button(agent.busy ? "Running..." : "Send") != 0)
-                    sendPressed = true;
-                dcad_gui_end_disabled();
-                dcad_gui_same_line();
-                dcad_gui_begin_disabled(agent.busy ? 0 : 1);
-                if (dcad_gui_button("Stop") != 0)
-                    agent.stop();
-                dcad_gui_end_disabled();
-                dcad_gui_same_line();
-                dcad_gui_begin_disabled(agent.hasPatch && !agent.busy ? 0 : 1);
-                if (dcad_gui_button(showAgentDiff ? "Hide diff" : "Diff") != 0)
-                    showAgentDiff = !showAgentDiff;
-                dcad_gui_end_disabled();
-                dcad_gui_same_line();
-                dcad_gui_begin_disabled(agent.hasPatch && !agent.busy ? 0 : 1);
-                if (dcad_gui_button("Keep") != 0)
-                    agent.keepLastChange();
-                dcad_gui_end_disabled();
-                dcad_gui_same_line();
-                dcad_gui_begin_disabled(agent.hasPatch && !agent.busy ? 0 : 1);
-                if (dcad_gui_button("Undo") != 0)
-                {
-                    bool undoAffectsActive;
-                    foreach (file; agent.patchFiles())
-                        if (file == currentFile) undoAffectsActive = true;
-                    if (agent.undoLastChange() && undoAffectsActive)
-                    {
-                        immutable path = buildPath(projectRoot, currentFile);
-                        if (exists(path))
-                        {
-                            auto restored = readText(path);
-                            dcad_textedit_set_text(editor, restored.toStringz);
-                            lsp.changeDocument(currentFile, restored);
-                        }
-                    }
-                }
-                dcad_gui_end_disabled();
+                    inputTextFlagsWordWrap) != 0;
+                if (dcad_gui_is_item_active() != 0 &&
+                    dcad_gui_key_chord_pressed(keyEnter) != 0)
+                    submit = true;
 
-                if (sendPressed && !agent.busy)
+                if (submit)
                 {
+                    agentPromptFocus = true;
                     auto text = fromStringz(agentPrompt.ptr).idup;
-                    if (agent.send(text, currentFile))
+                    immutable command = parseAgentCommand(text);
+                    if (command.valid)
+                    {
+                        agentPrompt[] = '\0';
+                        runAgentCommand(text);
+                    }
+                    else if (!agent.busy && text.strip.length &&
+                             agent.send(text, currentFile))
                     {
                         agentPrompt[] = '\0';
                         status = "Big Pickle prompt sent";
                     }
                 }
-                dcad_gui_same_line();
+
+                dcad_gui_spacing();
                 dcad_gui_align_text_to_frame_padding();
-                dcad_gui_text_colored(agent.status.toStringz,
-                                      0.63f, 0.71f, 0.42f, 1);
+                auto hint = agent.busy
+                    ? "Esc interrupts - /commands"
+                    : "Enter sends - Esc interrupts - /commands";
+                dcad_gui_text_colored(hint.toStringz, 0.40f, 0.40f, 0.40f, 1);
             }
         }
         dcad_gui_end();

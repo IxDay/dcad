@@ -535,6 +535,16 @@ final class AgentBridge
         (new AgentCredentials()).save(AgentCredential(strip(apiKey), strip(baseURL)));
     }
 
+    /// Append a local UI message without invoking the model. Used by slash
+    /// commands and keyboard shortcuts so command output stays in the transcript.
+    void note(string text)
+    {
+        appendMessage(messages, AgentMessage(AgentRole.status, text, "ui:" ~ text));
+        status = text;
+        revision++;
+        flush();
+    }
+
     /// True when a model edit has an undoable project patch.
     bool hasPatch() const @property
     {

@@ -50,6 +50,7 @@ enum int inputTextFlagsWordWrap = 1 << 24;
 // ImGuiKey values (1.93): named keys start at 512.
 enum int keySpace = 524;
 enum int keyEnter = 525;
+enum int keyEscape = 526;
 enum int keyF5 = 568;
 enum int keyR = 555;
 enum int modCtrl = 1 << 12; // Cmd on macOS
@@ -126,6 +127,7 @@ extern(C) nothrow @nogc
     int  dcad_gui_invisible_button(const(char)* id, float w, float h);
     int  dcad_gui_is_item_active();
     int  dcad_gui_is_item_hovered();
+    void dcad_gui_set_keyboard_focus_here();
     int  dcad_gui_begin_child(const(char)* id, float w, float h, int flags);
     void dcad_gui_end_child();
     int  dcad_gui_begin_tab_bar(const(char)* id, int flags);
@@ -150,6 +152,9 @@ extern(C) nothrow @nogc
     int  dcad_gui_input_int(const(char)* label, int* v, int step);
     int  dcad_gui_input_text_multiline(const(char)* label, char* buf,
                                        int bufSize, float w, float h, int flags);
+    int  dcad_gui_input_text_multiline_plain(const(char)* label, char* buf,
+                                             int bufSize, float w, float h,
+                                             int flags);
     int  dcad_gui_input_text(const(char)* label, char* buf, int bufSize,
                              float w, int flags);
     void dcad_gui_begin_disabled(int disabled);

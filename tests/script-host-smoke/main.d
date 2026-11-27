@@ -33,6 +33,8 @@ import gui.agentcore.patches : AgentChangeRecorder, revertEventData;
 import gui.agentcore.schema : AgentFinishReason, agentBoolField,
                           finishReasonName, normalizeFinishReason,
                           parseAgentPromptInput, parseAgentSessionInfo;
+import gui.agent_commands : agentCommandArgs, agentCommandHelp,
+                            parseAgentCommand;
 import gui.agentcore.sse : AgentSSEEvent, AgentSSEParser;
 import gui.imgui : dcad_gui_font_selftest;
 import gui.lsp.bridge : DLspBridge, LspMemoryChannel, LspSnapshot;
@@ -210,6 +212,27 @@ int main(string[] args)
     {
         stderr.writeln("new project parts: ", projectHost.animPartCount(),
                        " (expected 3)");
+        return 1;
+    }
+
+    // The Agent pane is keyboard-first: plain text goes to the model, while
+    // slash commands drive every UI action that used to be a button.
+    auto plainPrompt = parseAgentCommand("hello /commands");
+    auto commandsPrompt = parseAgentCommand("  /Commands  ");
+    auto authPrompt = parseAgentCommand(
+        "/auth test-key http://127.0.0.1:1/v1");
+    auto authArgs = agentCommandArgs(authPrompt.args);
+    auto help = agentCommandHelp();
+    if (plainPrompt.valid ||
+        !commandsPrompt.valid || commandsPrompt.name != "commands" ||
+        !authPrompt.valid || authPrompt.name != "auth" ||
+        authArgs.length != 2 || authArgs[0] != "test-key" ||
+        authArgs[1] != "http://127.0.0.1:1/v1" ||
+        !help.canFind("/stop") || !help.canFind("/diff") ||
+        !help.canFind("/keep") || !help.canFind("/undo") ||
+        !help.canFind("/auth") || !help.canFind("/status"))
+    {
+        stderr.writeln("agent slash command parsing failed");
         return 1;
     }
 
@@ -814,6 +837,6 @@ int main(string[] args)
         return 1;
     }
 
-    writeln("PASS: script host forms, TOML scaffold, daimochi joint and embedded-agent core");
+    writeln("PASS: script host forms, TOML scaffold, daimochi joint, embedded-agent core and slash commands");
     return 0;
 }

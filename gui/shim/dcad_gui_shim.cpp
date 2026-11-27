@@ -659,6 +659,10 @@ extern "C" int dcad_gui_invisible_button(const char* id, float w, float h)
 }
 extern "C" int dcad_gui_is_item_active(void) { return ImGui::IsItemActive() ? 1 : 0; }
 extern "C" int dcad_gui_is_item_hovered(void) { return ImGui::IsItemHovered() ? 1 : 0; }
+extern "C" void dcad_gui_set_keyboard_focus_here(void)
+{
+    ImGui::SetKeyboardFocusHere();
+}
 
 extern "C" int dcad_gui_begin_child(const char* id, float w, float h, int flags)
 {
@@ -725,6 +729,28 @@ extern "C" int dcad_gui_input_text_multiline(const char* label, char* buf,
                                      ImVec2(w, h),
                                      static_cast<ImGuiInputTextFlags>(flags)) ? 1 : 0;
 }
+extern "C" int dcad_gui_input_text_multiline_plain(const char* label, char* buf,
+                                                    int bufSize, float w, float h,
+                                                    int flags)
+{
+    // The Agent prompt is an OpenCode-style editor: no frame, no border, just
+    // text and the caret. Keep the theme's selection/cursor colours so editing
+    // still reads clearly against the pane background.
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding,
+                        ImVec2(4.0f * g_uiScale, 4.0f * g_uiScale));
+    ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    ImGui::PushStyleColor(ImGuiCol_FrameBgActive, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+    bool edited = ImGui::InputTextMultiline(label, buf,
+                                            static_cast<size_t>(bufSize),
+                                            ImVec2(w, h),
+                                            static_cast<ImGuiInputTextFlags>(flags));
+    ImGui::PopStyleColor(3);
+    ImGui::PopStyleVar(2);
+    return edited ? 1 : 0;
+}
+
 extern "C" int dcad_gui_input_text(const char* label, char* buf, int bufSize,
                                    float w, int flags)
 {
