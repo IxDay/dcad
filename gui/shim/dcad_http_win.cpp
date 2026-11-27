@@ -33,6 +33,9 @@ typedef struct DcadHttpResult {
 typedef int (*DcadHttpChunkFn)(const char* bytes, size_t length, void* userData);
 typedef int (*DcadHttpCancelFn)(void* userData);
 
+} // extern "C"
+
+// Helpers use C++ linkage so std::wstring is not declared with the C ABI.
 namespace {
 
 char* copy_error(const char* text) {
@@ -80,6 +83,8 @@ std::wstring widen(const char* text) {
 }
 
 } // namespace
+
+extern "C" {
 
 int dcad_http_post_stream(const DcadHttpRequest* request,
                           DcadHttpChunkFn onChunk,
@@ -149,7 +154,7 @@ int dcad_http_post_stream(const DcadHttpRequest* request,
             WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_REPLACE);
     }
 
-    if (!WinHttpSendRequest(handle, WINHTTP_NO_HEADERS, 0,
+    if (!WinHttpSendRequest(handle, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                             const_cast<char*>(request->body),
                             static_cast<DWORD>(request->bodyLength),
                             static_cast<DWORD>(request->bodyLength), 0)) {
