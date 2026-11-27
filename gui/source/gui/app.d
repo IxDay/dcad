@@ -570,13 +570,13 @@ void main(string[] args)
                 auto parts = agentCommandArgs(command.args);
                 if (parts.length < 1)
                 {
-                    agent.note("Usage: /auth <key> [base-url]");
+                    agent.note("Usage: /auth <key|public> [base-url]");
                     break;
                 }
                 immutable url = parts.length > 1 ? parts[1] : defaultAgentBaseURL;
                 agent.saveCredential(parts[0], url);
                 status = "Agent credentials saved";
-                agent.note("Credentials saved in dcad's app cache");
+                agent.note("Credentials saved in .dcad/config.toml");
                 break;
             }
             case "status":
@@ -594,16 +594,11 @@ void main(string[] args)
         }
     }
 
-    // Project tree state.
-    bool[string] folderOpen = [
-        "source": true,
-        "gui": true,
-        "gui/source": true,
-        "samples": true,
-        "samples/coffee-table": true,
-        "tests": true,
-        "tools": true,
-    ];
+    // Project tree state. The empty key is the root accordion; every other
+    // key is a project-relative directory path. New projects start collapsed
+    // below the root, like VS Code's Explorer.
+    bool[string] folderOpen;
+    folderOpen[""] = true;
 
     void drawFileTree(string absDir, string relDir)
     {
@@ -623,11 +618,11 @@ void main(string[] args)
             immutable key = relDir.length ? relDir ~ "/" ~ e.name : e.name;
             if (e.isDir)
             {
-                int open = ((key in folderOpen) !is null && folderOpen[key]) ? 1 : 0;
-                dcad_gui_icon_image(
-                    iconTexture(open != 0 ? iconFolderOpen : iconFolder), px(16), px(16));
-                dcad_gui_same_line();
-                if (dcad_gui_tree_node(e.name.toStringz, &open) != 0)
+                int open = folderOpen.get(key, false) ? 1 : 0;
+                if (dcad_gui_tree_node_icon(
+                        key.toStringz, e.name.toStringz, &open,
+                        iconTexture(open != 0 ? iconFolderOpen : iconFolder),
+                        px(16), px(16)) != 0)
                 {
                     folderOpen[key] = true;
                     drawFileTree(e.path, key);
@@ -635,14 +630,16 @@ void main(string[] args)
                 }
                 else
                     folderOpen[key] = false;
+                dcad_gui_tree_gap();
             }
             else
             {
                 int selected = key == currentFile ? 1 : 0;
                 auto fi = fileIcon(e.name);
-                dcad_gui_icon_image(iconTexture(fi.texture), px(16), px(16));
-                dcad_gui_same_line();
-                if (dcad_gui_selectable(e.name.toStringz, selected) != 0)
+                immutable id = "##" ~ key;
+                if (dcad_gui_selectable_icon(
+                        id.toStringz, e.name.toStringz, selected,
+                        iconTexture(fi.texture), px(16), px(16)) != 0)
                 {
                     try
                     {
@@ -864,7 +861,21 @@ void main(string[] args)
             if (dcad_gui_begin_child("##tree", 0,
                                      treeH > px(40) ? treeH : px(40),
                                      childFlagsNone))
-                drawFileTree(projectRoot, "");
+            {
+                int rootOpen = folderOpen[""] ? 1 : 0;
+                immutable projectTitle = project.name.length
+                    ? project.name : baseName(projectRoot);
+                if (dcad_gui_tree_node_icon(
+                        "##project-root", projectTitle.toStringz, &rootOpen,
+                        iconTexture(rootOpen != 0 ? iconFolderOpen : iconFolder),
+                        px(16), px(16)) != 0)
+                {
+                    drawFileTree(projectRoot, "");
+                    dcad_gui_tree_pop();
+                }
+                folderOpen[""] = rootOpen != 0;
+                dcad_gui_tree_gap();
+            }
             dcad_gui_end_child();
         }
         dcad_gui_end();

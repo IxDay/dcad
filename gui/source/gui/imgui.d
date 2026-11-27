@@ -145,6 +145,11 @@ extern(C) nothrow @nogc
     int  dcad_gui_slider_float(const(char)* label, float* v,
                                float vmin, float vmax);
     int  dcad_gui_tree_node(const(char)* label, int* open);
+    int  dcad_gui_tree_node_icon(const(char)* id, const(char)* label,
+                                 int* open, void* texID, float w, float h);
+    int  dcad_gui_selectable_icon(const(char)* id, const(char)* label,
+                                  int selected, void* texID, float w, float h);
+    void dcad_gui_tree_gap();
     void dcad_gui_tree_pop();
     int  dcad_gui_selectable(const(char)* label, int selected);
     int  dcad_gui_checkbox(const(char)* label, int* v);

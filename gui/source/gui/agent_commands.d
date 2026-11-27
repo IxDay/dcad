@@ -59,6 +59,6 @@ string agentCommandHelp()
          ~ "/keep                keep staged edits\n"
          ~ "/undo                revert staged edits\n"
          ~ "/model               show the active model and endpoint\n"
-         ~ "/auth <key> [url]    save dcad-owned credentials\n"
+         ~ "/auth <key|public>   save key/URL in .dcad/config.toml\n"
          ~ "/status              show session and agent state\n";
 }

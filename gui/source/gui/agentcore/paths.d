@@ -1,9 +1,10 @@
 /**
  * Filesystem locations used by the embedded agent.
  *
- * Sessions and patches live in the project's .dcad directory. Credentials and
- * transient config stay in dcad's app cache and are never written into a
- * project.
+ * Sessions, reversible patches and agent config all live in the project's
+ * `.dcad` directory. `DCAD_AGENT_CONFIG_DIR` can relocate the config for
+ * automation; without a project root the app cache is used as a safe fallback
+ * for headless tests.
  */
 module gui.agentcore.paths;
 
@@ -37,16 +38,19 @@ string agentAppCacheDir()
     return buildPath(tempDir(), "dcad-agent-cache");
 }
 
-string agentConfigDir()
+/// Directory containing config.toml for a project. The override keeps CI and
+/// embedded tests independent of the developer's projects.
+string agentConfigDir(string projectRoot = "")
 {
     auto overrideDir = environment.get("DCAD_AGENT_CONFIG_DIR", "");
     if (overrideDir.length) return overrideDir;
+    if (projectRoot.length) return buildPath(projectRoot, ".dcad");
     return buildPath(agentAppCacheDir(), "config");
 }
 
-string agentCredentialsPath()
+string agentConfigPath(string projectRoot = "")
 {
-    return buildPath(agentConfigDir(), "credentials.json");
+    return buildPath(agentConfigDir(projectRoot), "config.toml");
 }
 
 string agentHistoryDir(string projectRoot)

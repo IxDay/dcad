@@ -78,11 +78,12 @@ running turn from any tab, and Cmd/Ctrl+Enter inserts a newline. Type
 commands, which refresh the open editor after a change is applied or restored.
 
 Agent history belongs to the project: every opened project gets a `.dcad/`
-directory containing `history.jsonl` and, after a model edit, reversible patches
-in `.dcad/patches/`. API credentials are dcad-owned and stay in dcad's app cache
-(`~/Library/Caches/dcad/agent` on macOS, `~/.cache/dcad/agent` on Linux,
-`%LOCALAPPDATA%\dcad\agent` on Windows); the installed OpenCode auth store is
-not read. `DCAD_AGENT_API_KEY`, `DCAD_AGENT_BASE_URL` and
+directory containing `history.jsonl`, agent settings in `config.toml`, and,
+after a model edit, reversible patches in `.dcad/patches/`. API credentials are
+dcad-owned and stay in that project config; the installed OpenCode auth store is
+not read. Free `opencode/big-pickle` needs no account: like OpenCode, dcad sends
+the public key `public` when no key is configured, with free usage rate-limited
+per network. `DCAD_AGENT_API_KEY`, `DCAD_AGENT_BASE_URL` and
 `DCAD_AGENT_CONFIG_DIR` override the persisted values for automation.
 
 The editor uses only the fixed `serve-d` language server. dcad looks for it in

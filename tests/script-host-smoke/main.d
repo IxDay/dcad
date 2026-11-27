@@ -28,7 +28,7 @@ import gui.agent : AgentBridge, AgentChatMessage, AgentEvent, AgentEventType,
                    projectAgentEvent, makeSessionId, readAgentHistory,
                    writeAgentHistorySnapshot;
 import gui.agentcore.credentials : AgentCredential, AgentCredentials,
-                              defaultAgentBaseURL;
+                              defaultAgentBaseURL, publicAgentAPIKey;
 import gui.agentcore.patches : AgentChangeRecorder, revertEventData;
 import gui.agentcore.schema : AgentFinishReason, agentBoolField,
                           finishReasonName, normalizeFinishReason,
@@ -639,8 +639,8 @@ int main(string[] args)
         return 1;
     }
 
-    // Credentials are dcad-owned: app-cache config plus env overrides, never
-    // installed OpenCode auth and never a project file.
+    // Config is project-owned beside history; env overrides still win and the
+    // installed OpenCode auth store is never read.
     immutable savedConfigDir = environment.get("DCAD_AGENT_CONFIG_DIR", "");
     immutable savedKey = environment.get("DCAD_AGENT_API_KEY", "");
     immutable savedURL = environment.get("DCAD_AGENT_BASE_URL", "");
@@ -653,23 +653,42 @@ int main(string[] args)
         if (savedURL.length) environment["DCAD_AGENT_BASE_URL"] = savedURL;
         else environment.remove("DCAD_AGENT_BASE_URL");
     }
-    environment["DCAD_AGENT_CONFIG_DIR"] = buildPath(workDir, "agent-config");
+    environment["DCAD_AGENT_CONFIG_DIR"] = "";
     environment["DCAD_AGENT_API_KEY"] = "";
     environment["DCAD_AGENT_BASE_URL"] = "";
+    immutable configProject = buildPath(workDir, "config-project");
+    mkdirRecurse(configProject);
     auto credentials = new AgentCredentials();
-    credentials.save(AgentCredential("test-key", "http://127.0.0.1:1/v1"));
-    auto stored = credentials.load();
+    credentials.save(AgentCredential("test-key", "http://127.0.0.1:1/v1"),
+                     configProject);
+    immutable configFile = buildPath(configProject, ".dcad", "config.toml");
+    auto stored = credentials.load(configProject);
+    auto freeDefault = credentials.load(buildPath(workDir, "no-config"));
     environment["DCAD_AGENT_API_KEY"] = "env-key";
-    auto overridden = credentials.load();
-    if (!stored.hasKey || stored.apiKey != "test-key" ||
+    auto overridden = credentials.load(configProject);
+    if (!exists(configFile) ||
+        !stored.hasKey || stored.apiKey != "test-key" ||
         stored.baseURL != "http://127.0.0.1:1/v1" ||
+        freeDefault.apiKey != publicAgentAPIKey ||
         overridden.apiKey != "env-key" ||
         defaultAgentBaseURL != "https://opencode.ai/inference/openai/v1")
     {
-        stderr.writeln("dcad-owned credentials failed");
+        stderr.writeln("project-local agent config failed");
         return 1;
     }
     environment["DCAD_AGENT_API_KEY"] = "";
+
+    // The override relocates config.toml for automation and CI.
+    environment["DCAD_AGENT_CONFIG_DIR"] = buildPath(workDir, "agent-config");
+    credentials.save(AgentCredential("override-key", defaultAgentBaseURL));
+    auto overriddenDir = credentials.load();
+    if (overriddenDir.apiKey != "override-key" ||
+        !exists(buildPath(workDir, "agent-config", "config.toml")))
+    {
+        stderr.writeln("DCAD_AGENT_CONFIG_DIR override failed");
+        return 1;
+    }
+    environment["DCAD_AGENT_CONFIG_DIR"] = "";
 
     // History is append-only, project-owned JSONL and tolerates a truncated
     // final line from an interrupted write.

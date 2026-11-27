@@ -6,8 +6,9 @@
  * gui.agentcore.* modules. The replacement keeps all model/tool work off the GUI
  * thread and drains events once per frame.
  *
- * Project history is stored in <project>/.dcad/history.jsonl. Credentials stay
- * in dcad's app cache and are never written into a project.
+ * Project history is stored in <project>/.dcad/history.jsonl and agent config
+ * in <project>/.dcad/config.toml. The installed OpenCode auth store is never
+ * read.
  */
 module gui.agent;
 
@@ -21,7 +22,7 @@ public import gui.agentcore.llm : AgentChatMessage, AgentCompletionChunk,
                                 isAgentStreamDone, makeChatRequest,
                                 parseChatCompletionChunk;
 public import gui.agentcore.credentials : AgentCredential, AgentCredentials,
-                                defaultAgentBaseURL;
+                                defaultAgentBaseURL, publicAgentAPIKey;
 public import gui.agentcore.sse : AgentSSEEvent, AgentSSEParser;
 public import gui.agentcore.paths : agentConfigDir, agentHistoryDir;
 public import gui.agentcore.transport : AgentHTTPRequest, AgentHTTPResult,
@@ -327,7 +328,8 @@ private string hex(ulong value)
     return outBuf.idup;
 }
 
-/// App-cache location for credentials and transient agent state.
+/// App-cache location for transitional CLI state. Project config now lives in
+/// `<project>/.dcad/config.toml`.
 string agentCacheDir()
 {
     return agentAppCacheDir();
@@ -522,17 +524,20 @@ final class AgentBridge
         transport = selected;
     }
 
-    /// Current dcad-owned credential. Environment overrides win over the
-    /// persisted value, matching the agent core's loader.
+    /// Current project credential. Environment overrides win over the saved
+    /// value; free Big Pickle uses the public key when none is configured.
     AgentCredential credential()
     {
-        return (new AgentCredentials()).load();
+        return (new AgentCredentials()).load(projectRoot);
     }
 
-    /// Persist credentials in dcad's app cache, never in the open project.
+    /// Persist credentials beside the project history in `.dcad/config.toml`.
     void saveCredential(string apiKey, string baseURL)
     {
-        (new AgentCredentials()).save(AgentCredential(strip(apiKey), strip(baseURL)));
+        auto saved = (new AgentCredentials()).load(projectRoot);
+        saved.apiKey = strip(apiKey);
+        saved.baseURL = strip(baseURL);
+        (new AgentCredentials()).save(saved, projectRoot);
     }
 
     /// Append a local UI message without invoking the model. Used by slash
@@ -754,11 +759,11 @@ final class AgentBridge
 
     private bool sendEmbedded(string activeFile)
     {
-        auto credential = (new AgentCredentials()).load();
+        auto credential = this.credential();
         if (!credential.hasKey)
         {
             appendMessage(messages, AgentMessage(AgentRole.error,
-                "dcad agent API key is not configured. Add it in the Agent tab."));
+                "dcad agent has no API key. Use /auth <key> [url]."));
             status = "Agent unavailable";
             revision++;
             flush();

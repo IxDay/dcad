@@ -697,6 +697,44 @@ extern "C" int dcad_gui_tree_node(const char* label, int* open)
     return isOpen ? 1 : 0;
 }
 extern "C" void dcad_gui_tree_pop(void) { ImGui::TreePop(); }
+
+// VS Code-style rows: the accordion arrow is drawn by TreeNodeEx, then the
+// file icon and name are placed at the label position. The whole row remains
+// clickable, so folders behave like real accordions.
+extern "C" int dcad_gui_tree_node_icon(const char* id, const char* label,
+                                       int* open, void* texID, float w, float h)
+{
+    ImGui::SetNextItemOpen(*open != 0, ImGuiCond_Always);
+    bool isOpen = ImGui::TreeNodeEx(id,
+        ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth,
+        "%s", "");
+    *open = isOpen ? 1 : 0;
+    ImGui::SameLine(0, 2.0f * g_uiScale);
+    ImGui::Image(texID, ImVec2(w, h));
+    ImGui::SameLine(0, 4.0f * g_uiScale);
+    ImGui::TextUnformatted(label);
+    return isOpen ? 1 : 0;
+}
+
+extern "C" int dcad_gui_selectable_icon(const char* id, const char* label,
+                                        int selected, void* texID,
+                                        float w, float h)
+{
+    float rowX = ImGui::GetCursorPosX();
+    bool clicked = ImGui::Selectable(id, selected != 0,
+                                     ImGuiSelectableFlags_SpanAvailWidth);
+    ImGui::SetCursorPosX(rowX + ImGui::GetTreeNodeToLabelSpacing());
+    ImGui::Image(texID, ImVec2(w, h));
+    ImGui::SameLine(0, 4.0f * g_uiScale);
+    ImGui::TextUnformatted(label);
+    return clicked ? 1 : 0;
+}
+
+extern "C" void dcad_gui_tree_gap(void)
+{
+    ImGui::Dummy(ImVec2(0.0f, 2.0f * g_uiScale));
+}
+
 extern "C" int dcad_gui_selectable(const char* label, int selected)
 {
     return ImGui::Selectable(label, selected != 0) ? 1 : 0;
