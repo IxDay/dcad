@@ -318,10 +318,12 @@ void main(string[] args)
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
 
-    // ImGui coordinates are framebuffer pixels; GLFW window sizes are screen
-    // points. Content scale and framebuffer/window ratio are both checked:
-    // GLFW reports one or the other depending on platform and GL version.
-    // DCAD_UI_SCALE remains an explicit override for mixed-DPI setups.
+    // ImGui layout coordinates are screen points. On macOS the GLFW backend
+    // already reports Retina density through DisplayFramebufferScale, which
+    // ImGui 1.93 uses for font rasterization; scaling layout here as well would
+    // make every control twice as large. Windows needs its content scale
+    // applied because its framebuffer scale stays 1. DCAD_UI_SCALE remains an
+    // explicit override for mixed-DPI setups.
     float forcedScale = 0f;
     immutable scaleOverride = environment.get("DCAD_UI_SCALE", "");
     if (scaleOverride.length)
@@ -335,18 +337,28 @@ void main(string[] args)
 
     float detectedScale(GLFWwindow* w)
     {
-        float sx = 0f, sy = 0f;
-        glfwGetWindowContentScale(w, &sx, &sy);
-        float scale = sx > sy ? sx : sy;
-        int framebufferW, framebufferH, windowWPoints, windowHPoints;
-        glfwGetFramebufferSize(w, &framebufferW, &framebufferH);
-        glfwGetWindowSize(w, &windowWPoints, &windowHPoints);
-        if (windowWPoints > 0 && framebufferW > 0)
+        version (OSX)
         {
-            immutable ratio = cast(float) framebufferW / windowWPoints;
-            if (ratio > scale) scale = ratio;
+            // Retina density is handled by ImGui's backend via
+            // DisplayFramebufferScale. GLFW window sizes are already in points,
+            // so applying content scale to layout would overscale the UI.
+            return 1f;
         }
-        return scale > 0f ? scale : 1f;
+        else
+        {
+            float sx = 0f, sy = 0f;
+            glfwGetWindowContentScale(w, &sx, &sy);
+            float scale = sx > sy ? sx : sy;
+            int framebufferW, framebufferH, windowWPoints, windowHPoints;
+            glfwGetFramebufferSize(w, &framebufferW, &framebufferH);
+            glfwGetWindowSize(w, &windowWPoints, &windowHPoints);
+            if (windowWPoints > 0 && framebufferW > 0)
+            {
+                immutable ratio = cast(float) framebufferW / windowWPoints;
+                if (ratio > scale) scale = ratio;
+            }
+            return scale > 0f ? scale : 1f;
+        }
     }
 
     void refreshUiScale(GLFWwindow* w)
