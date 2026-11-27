@@ -9,7 +9,8 @@
 module gui.app;
 
 import std.stdio : stderr, writeln;
-import std.file : mkdirRecurse, exists, readText, write, dirEntries, SpanMode, isDir, tempDir;
+import std.file : getcwd, mkdirRecurse, exists, readText, write, dirEntries,
+                  SpanMode, isDir, tempDir;
 import std.path : absolutePath, buildPath, baseName, dirName, extension;
 import std.string : toStringz, fromStringz, format, startsWith, endsWith, strip;
 import std.algorithm.sorting : sort;
@@ -23,8 +24,9 @@ import gui.agent_commands : parseAgentCommand, agentCommandArgs,
                             agentCommandHelp;
 import gui.agentcore.native_transport : AgentNativeTransport;
 import gui.platform : processId, nativeHandles, resourceRoot;
-import gui.project : Project, chooseProjectParent, fallbackProjectParent,
-                     uniqueProjectPath;
+import gui.project : Project, ProjectChoice, askProjectChoice,
+                     chooseExistingProject, chooseProjectParent,
+                     fallbackProjectParent, uniqueProjectPath;
 
 import bindbc.glfw;
 import bindbc.opengl;
@@ -56,7 +58,8 @@ extern(C) void dcad_new_project_callback()
         g_newProjectAction();
 }
 
-// Startup opens a real, tracked script file. There is no hidden session file.
+// Startup opens a real project from the launch directory or the first-run
+// modal. There is no hidden session file and no implicitly opened sample.
 private enum string defaultProjectDir = "samples/coffee-table";
 // Layout values are authored at 100% and multiplied by the display scale.
 private enum float sidebarWidthBase = 220f;
@@ -248,9 +251,12 @@ void main(string[] args)
 
     // Project handler: `dcad-gui <project-dir|.dcad.toml|source.d>` opens a
     // project, while `--new-project <target-dir>` scaffolds the daimochi
-    // sample and opens it. With no argument the bundled coffee table is used.
+    // sample. With no argument, a project in the launch directory is opened;
+    // otherwise a native modal offers Open Existing / Create New. No sample
+    // project is opened implicitly.
     Project project;
-    if (args.length > 1 && args[1] == "--new-project")
+    immutable explicitArg = args.length > 1;
+    if (explicitArg && args[1] == "--new-project")
     {
         immutable target = args.length > 2
             ? args[2] : uniqueProjectPath(fallbackProjectParent(),
@@ -260,15 +266,62 @@ void main(string[] args)
         catch (Exception e)
             stderr.writeln("new project failed: ", e.msg);
     }
-    else if (args.length > 1)
+    else if (explicitArg)
     {
         try
             project = Project.open(args[1]);
         catch (Exception e)
             stderr.writeln("cannot open project ", args[1], ": ", e.msg);
     }
+    else
+    {
+        try
+            project = Project.open(getcwd());
+        catch (Exception)
+        {
+            // No project in the launch directory: ask below.
+        }
+    }
+
     if (project.root.length == 0)
-        project = Project.bundled(root);
+    {
+        final switch (askProjectChoice())
+        {
+            case ProjectChoice.none:
+                stderr.writeln("no project selected; exiting");
+                return;
+            case ProjectChoice.openExisting:
+            {
+                auto path = chooseExistingProject();
+                if (path.length)
+                {
+                    try
+                        project = Project.open(path);
+                    catch (Exception e)
+                        stderr.writeln("cannot open project ", path, ": ",
+                                       e.msg);
+                }
+                break;
+            }
+            case ProjectChoice.createNew:
+            {
+                auto parent = chooseProjectParent();
+                if (parent is null) parent = fallbackProjectParent();
+                mkdirRecurse(parent);
+                try
+                    project = Project.create(
+                        uniqueProjectPath(parent, "daimochi-tsugi"), root);
+                catch (Exception e)
+                    stderr.writeln("new project failed: ", e.msg);
+                break;
+            }
+        }
+    }
+    if (project.root.length == 0)
+    {
+        stderr.writeln("no project selected; exiting");
+        return;
+    }
     string projectRoot = project.root;
     string currentFile = project.entry;
 

@@ -379,8 +379,8 @@ public:
     }
 
     /// `projectRoot` is the directory whose `.d` files are compiled with the
-    /// editor source. The bare constructor keeps the bundled coffee-table
-    /// sample as the implicit project; a real project passes its own root.
+    /// editor source. The bare constructor keeps the sample directory available
+    /// to headless tests; the GUI always passes the project it opened.
     this(string workDir, string repoRoot, string projectRoot)
     {
         this.workDir = workDir;

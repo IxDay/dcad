@@ -15,5 +15,5 @@
 __pycache__/
 /table/
 /dcad-export.step
-/imgui.ini
+imgui.ini
 /dub.selections.json

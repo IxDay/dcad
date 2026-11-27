@@ -50,14 +50,17 @@ re-mesh.
 The left sidebar shows the current project's directory with the exact file icons
 VS Code uses (its built-in Seti icon theme, extracted to PNGs). Click a disclosure
 arrow to expand or collapse folders, and click a file to load it into the editor.
-The sidebar is always visible. Startup opens the bundled coffee-table sample
-directly: there is no recent-project list, folder picker or "create a project?"
-prompt until you choose **File > New Project...** (Cmd/Ctrl+N), which scaffolds
-the three-piece daimochi-tsugi joint in a folder you choose, opens `main.d` and runs its
-take-apart animation. You can also pass a project directory, `.dcad.toml` or a
-`.d` file to `dcad-gui` on the command line; **Save** always writes the open file
-in that directory. Each coffee-table element has its own module, which you can
-open and Run to preview that element alone.
+The sidebar is always visible. With no argument, dcad opens a project from the
+launch directory. If it was not launched from a project, a native modal asks
+whether to open an existing project or create a new one; no sample is opened
+implicitly. You can also pass a project directory, `.dcad.toml` or a `.d` file to
+`dcad-gui` on the command line. **File > New Project...** (Cmd/Ctrl+N) scaffolds
+the three-piece daimochi-tsugi joint in a folder you choose and opens `main.d`.
+`samples/coffee-table` is a real project with `.dcad.toml` and `table.d` as its
+entry point, so it can be selected in the open dialog to test the full animated
+assembly. **Save** always writes the open file in that directory. Each
+coffee-table element has its own module, which you can open and Run to preview
+that element alone.
 When an animated script is loaded, its parts are listed as a transparent overlay
 in the top-right of the preview: hovering a part highlights it in the render, and
 clicking it opens the source module that builds that part.
@@ -68,10 +71,11 @@ canonical V2 events, project tools, permissions, diffs and JSONL history all run
 in D. Streaming HTTPS uses WinHTTP on Windows, NSURLSession on macOS and libcurl
 on Linux, always on a worker thread; the UI never blocks on a model call. The
 agent sees only the open project, and the active `.d` file is attached to each
-prompt. Enter or **Send** submits a prompt, **Stop** cancels a running turn, and
-Cmd/Ctrl+Enter inserts a newline. Model edits are staged with **Diff**, **Keep**
-and **Undo**, which refreshes the open editor after a change is applied or
-restored.
+prompt. The pane is keyboard-first: Enter submits a prompt, Esc interrupts a
+running turn from any tab, and Cmd/Ctrl+Enter inserts a newline. Type
+`/commands` for every action, including `/stop`, `/diff`, `/keep`, `/undo`,
+`/model`, `/auth` and `/status`. Model edits are staged through those slash
+commands, which refresh the open editor after a change is applied or restored.
 
 Agent history belongs to the project: every opened project gets a `.dcad/`
 directory containing `history.jsonl` and, after a model edit, reversible patches

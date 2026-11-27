@@ -105,13 +105,25 @@ int main(string[] args)
                                   ~ processId.to!string);
     mkdirRecurse(workDir);
 
-    // The implicit project is the sample directory, not the runtime cache, so
-    // the file tree shows only project sources.
-    auto bundled = Project.bundled(root);
-    if (baseName(bundled.root) != "coffee-table" ||
-        bundled.entry != "table.d" || !exists(bundled.entryPath()))
+    // The coffee table is a real project, but never an implicit default. The
+    // first-run modal can open it by selecting samples/coffee-table.
+    auto sample = Project.open(buildPath(root, "samples", "coffee-table"));
+    if (baseName(sample.root) != "coffee-table" ||
+        sample.entry != "table.d" || !exists(sample.entryPath()) ||
+        !exists(buildPath(sample.root, ".dcad.toml")))
     {
-        stderr.writeln("bundled default project is not the coffee-table sample");
+        stderr.writeln("coffee-table sample is not a valid dcad project");
+        return 1;
+    }
+
+    immutable beforeLaunchDir = getcwd();
+    chdir(sample.root);
+    auto launchedHere = Project.open(".");
+    chdir(beforeLaunchDir);
+    if (baseName(launchedHere.root) != "coffee-table" ||
+        launchedHere.entry != "table.d")
+    {
+        stderr.writeln("launch-directory project detection failed");
         return 1;
     }
 

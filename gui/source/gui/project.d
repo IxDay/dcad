@@ -13,9 +13,10 @@ module gui.project;
 
 import std.file : exists, isDir, mkdirRecurse, readText, write, dirEntries, SpanMode;
 import std.json : parseJSON, JSONType;
-import std.path : absolutePath, baseName, buildPath, dirName, extension;
+import std.path : absolutePath, baseName, buildNormalizedPath, buildPath,
+                  dirName, extension;
 import std.process : execute;
-import std.algorithm.searching : countUntil, endsWith, startsWith;
+import std.algorithm.searching : canFind, countUntil, endsWith, startsWith;
 import std.string : strip, splitLines;
 
 import gui.platform : resourceRoot;
@@ -48,7 +49,7 @@ struct Project
     /// inside a project. A bare source file is opened as the entry point.
     static Project open(string path)
     {
-        auto resolved = absolutePath(path);
+        auto resolved = absolutePath(path).buildNormalizedPath;
         Project result;
         string requestedSource;
         if (exists(resolved) && isDir(resolved))
@@ -82,18 +83,6 @@ struct Project
         immutable entryPath = buildPath(result.root, result.entry);
         if (!exists(entryPath))
             throw new Exception("source not found: " ~ entryPath);
-        return result;
-    }
-
-    /// The sample opened when no project argument is supplied. It must be a
-    /// real project directory: using the runtime root would show every SDK,
-    /// asset and template folder in the file tree.
-    static Project bundled(string runtimeRoot)
-    {
-        Project result;
-        result.root = buildPath(runtimeRoot, "samples", "coffee-table");
-        result.name = "coffee-table";
-        result.entry = "table.d";
         return result;
     }
 
@@ -221,10 +210,19 @@ string uniqueProjectPath(string parent, string baseName_)
     return candidate;
 }
 
-/// Ask for a parent directory with the platform's native folder picker.
-/// Returns null on cancel or when no picker is installed; the caller then uses
-/// a documented fallback directory instead of guessing inside the repo.
-string chooseProjectParent()
+/// Choice presented by the native first-run modal. No project is opened by
+/// default: the user either picks an existing one or scaffolds a new one.
+enum ProjectChoice
+{
+    none,
+    openExisting,
+    createNew,
+}
+
+/// Ask for a directory with the platform's native folder picker. Returns null
+/// on cancel or when no picker is installed; callers decide whether to fall
+/// back to a documented directory or abort.
+private string chooseFolder(string prompt)
 {
     version (OSX)
     {
@@ -232,7 +230,7 @@ string chooseProjectParent()
             "osascript", "-e",
             `tell application "System Events" to activate`,
             "-e",
-            `set dir to POSIX path of (choose folder with prompt "Choose a folder for the new D/OCCT project")`,
+            `set dir to POSIX path of (choose folder with prompt "` ~ prompt ~ `")`,
             "-e", `return dir`,
         ]);
         if (result.status == 0)
@@ -243,13 +241,15 @@ string chooseProjectParent()
     }
     else version (Windows)
     {
-        enum script =
+        enum scriptHead =
             `Add-Type -AssemblyName System.Windows.Forms; ` ~
             `$d = New-Object System.Windows.Forms.FolderBrowserDialog; ` ~
-            `$d.Description = 'Choose a folder for the new D/OCCT project'; ` ~
+            `$d.Description = '`;
+        enum scriptTail =
+            `'; ` ~
             `if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.SelectedPath }`;
         auto result = execute(["powershell.exe", "-NoProfile", "-STA",
-                               "-Command", script]);
+                               "-Command", scriptHead ~ prompt ~ scriptTail]);
         if (result.status == 0)
         {
             auto path = strip(result.output);
@@ -258,14 +258,14 @@ string chooseProjectParent()
     }
     else
     {
-        auto zenity = execute(["zenity", "--directory",
-                               "--title=New D/OCCT project"]);
+        auto zenity = execute(["zenity", "--directory", "--title=" ~ prompt]);
         if (zenity.status == 0)
         {
             auto path = strip(zenity.output);
             if (path.length) return path;
         }
-        auto kdialog = execute(["kdialog", "--getexistingdirectory"]);
+        auto kdialog = execute(["kdialog", "--getexistingdirectory",
+                                "--title", prompt]);
         if (kdialog.status == 0)
         {
             auto path = strip(kdialog.output);
@@ -273,6 +273,70 @@ string chooseProjectParent()
         }
     }
     return null;
+}
+
+/// Ask where a new project should be created.
+string chooseProjectParent()
+{
+    return chooseFolder("Choose a folder for the new D/OCCT project");
+}
+
+/// Ask which existing project directory to open.
+string chooseExistingProject()
+{
+    return chooseFolder("Choose an existing dcad project folder");
+}
+
+/// Native modal shown when no project was supplied or found in the launch
+/// directory. Cancelling returns `ProjectChoice.none`.
+ProjectChoice askProjectChoice()
+{
+    version (OSX)
+    {
+        auto result = execute(["osascript", "-e",
+            `display dialog "dcad needs a project. Open an existing project, or create a new one?" ` ~
+            `buttons {"Open Existing", "Create New", "Cancel"} ` ~
+            `default button "Open Existing" cancel button "Cancel"`]);
+        if (result.status != 0) return ProjectChoice.none;
+        auto answer = strip(result.output);
+        if (answer.canFind("Create New")) return ProjectChoice.createNew;
+        if (answer.canFind("Open Existing")) return ProjectChoice.openExisting;
+    }
+    else version (Windows)
+    {
+        enum script =
+            `Add-Type -AssemblyName System.Windows.Forms; ` ~
+            `$r = [System.Windows.Forms.MessageBox]::Show(` ~
+            `'dcad needs a project. Open an existing project, or create a new one?', ` ~
+            `'dcad', [System.Windows.Forms.MessageBoxButtons]::YesNoCancel, ` ~
+            `[System.Windows.Forms.MessageBoxIcon]::Question); ` ~
+            `if ($r -eq [System.Windows.Forms.DialogResult]::Yes) { Write-Output 'open' } ` ~
+            `elseif ($r -eq [System.Windows.Forms.DialogResult]::No) { Write-Output 'new' }`;
+        auto result = execute(["powershell.exe", "-NoProfile", "-STA",
+                               "-Command", script]);
+        if (result.status == 0)
+        {
+            auto answer = strip(result.output);
+            if (answer == "open") return ProjectChoice.openExisting;
+            if (answer == "new") return ProjectChoice.createNew;
+        }
+    }
+    else
+    {
+        auto zenity = execute(["zenity", "--question",
+                               "--title=dcad",
+                               "--text=Open an existing dcad project, or create a new one?",
+                               "--ok-label=Open Existing",
+                               "--cancel-label=Create New"]);
+        if (zenity.status == 0) return ProjectChoice.openExisting;
+        if (zenity.status == 1) return ProjectChoice.createNew;
+
+        auto kdialog = execute(["kdialog", "--yesno",
+                                "Open an existing dcad project?"]);
+        if (kdialog.status == 0) return ProjectChoice.openExisting;
+        if (kdialog.status == 1) return ProjectChoice.createNew;
+    }
+    return ProjectChoice.none;
 }
 
 /// Default location used when the folder picker is cancelled or unavailable.

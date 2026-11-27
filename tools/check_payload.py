@@ -17,6 +17,10 @@ def main():
         version = zf.read("dcad-version.txt").decode("utf-8").strip()
         if not version:
             raise SystemExit("launcher payload has an empty build version marker")
+        for name in ("samples/coffee-table/.dcad.toml",
+                     "samples/coffee-table/table.d"):
+            if name not in names:
+                raise SystemExit("coffee-table sample project is missing: " + name)
         if sys.platform == "win32":
             extension = ".dll"
         elif sys.platform == "darwin":

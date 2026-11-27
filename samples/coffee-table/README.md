@@ -5,6 +5,11 @@ of the CadQuery model in `platipy/coffee-table`). The same modules drive the
 GUI's live 3D preview; `table.d` also has an optional standalone main that emits
 **exact B-rep STEP files** instead of decimated STL meshes.
 
+This directory is a complete dcad project: `.dcad.toml` names `table.d` as its
+entry point. Launch the GUI from here to open it directly, or choose this folder
+in the first-run "Open existing project" dialog. The GUI never opens a sample
+implicitly.
+
 The model is a **1400 × 600 × 362 mm knock-down timber table** with traditional
 mortise-and-tenon joinery. X runs along the table 0…1400, Y across it −300…300,
 Z up 0…362.
